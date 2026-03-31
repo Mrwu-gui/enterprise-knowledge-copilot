@@ -1,0 +1,8 @@
+# 把真实 key 填到这里
+# 支持两种写法：
+# 1. 一行逗号分隔
+# 2. 每行一个 key
+
+sk-your-key-1
+sk-your-key-2
+sk-your-key-3

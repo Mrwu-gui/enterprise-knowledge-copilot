@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>版本打包中心 · RAG SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@400;500;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#10b981',
+            primaryDeep: '#059669',
+            line: '#e2e8f0',
+            textMain: '#0f172a',
+            textMuted: '#64748b',
+            panelSoft: '#f8fafc',
+            danger: '#ef4444',
+            warning: '#f59e0b',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    :root {
+      --primary: #10b981;
+      --primary-deep: #059669;
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --line: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Inter", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, .brand-font { font-family: "Manrope", sans-serif; }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+      line-height: 1 !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ─── Sidebar ─── */
+    #sidebar {
+      position: fixed; left: 0; top: 0; z-index: 40;
+      height: 100vh; width: 260px;
+      background: #0f172a;
+      display: flex; flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+
+    .menu-btn {
+      display: flex !important;
+      align-items: center !important;
+      gap: 12px !important;
+      width: 100%;
+      padding: 11px 16px !important;
+      border-radius: 12px !important;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+    }
+
+    .menu-btn:hover {
+      background: rgba(255,255,255,0.07);
+      color: #e2e8f0;
+    }
+
+    .menu-btn.active {
+      background: rgba(16, 185, 129, 0.15) !important;
+      color: #10b981 !important;
+      box-shadow: inset 0 0 0 1px rgba(16,185,129,0.3);
+    }
+
+    .menu-btn .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
+
+    /* ─── Main ─── */
+    #main-content {
+      margin-left: 260px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── Header ─── */
+    header {
+      position: sticky; top: 0; z-index: 30;
+      background: rgba(241, 245, 249, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--line);
+      padding: 20px 80px;
+    }
+
+    /* ─── Content ─── */
+    .content-area {
+      padding: 40px 80px 80px;
+      flex: 1;
+    }
+
+    /* ─── Auth Card ─── */
+    .auth-card {
+      background: #0f172a;
+      border-radius: 24px;
+      padding: 32px;
+      position: sticky;
+      top: 100px;
+    }
+
+    .auth-card label {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+
+    .auth-card input {
+      width: 100% !important;
+      height: 46px;
+      padding: 0 16px !important;
+      border-radius: 12px !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      background: rgba(255,255,255,0.06) !important;
+      color: #e2e8f0 !important;
+      font-family: inherit !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      outline: none !important;
+      transition: all 0.2s ease !important;
+    }
+
+    .auth-card input:focus {
+      border-color: rgba(16,185,129,0.5) !important;
+      background: rgba(16,185,129,0.07) !important;
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.15) !important;
+    }
+
+    .auth-card input::placeholder { color: #475569 !important; }
+
+    .btn-auth {
+      width: 100%;
+      height: 46px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+    }
+
+    .btn-auth:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(16,185,129,0.35);
+    }
+
+    .btn-auth:active { transform: translateY(0); }
+
+    /* ─── Profile Card ─── */
+    .profile-card {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: all 0.25s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+    .profile-card:hover {
+      border-color: #a7f3d0;
+      box-shadow: 0 8px 32px rgba(16,185,129,0.12);
+      transform: translateY(-2px);
+    }
+
+    .profile-card-header {
+      padding: 24px 28px 20px;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .profile-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .badge-enterprise {
+      background: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+    }
+
+    .badge-provider {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+    }
+
+    .badge-generic {
+      background: #f8fafc;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+    }
+
+    .profile-card-body {
+      padding: 20px 28px;
+    }
+
+    .profile-card-footer {
+      padding: 16px 28px;
+      background: #fafafa;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .code-block {
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #a7f3d0;
+      line-height: 1.65;
+      overflow-x: auto;
+      margin-top: 8px;
+    }
+
+    .code-block .key { color: #94a3b8; }
+    .code-block .val { color: #a7f3d0; }
+    .code-block .str { color: #fb923c; }
+
+    .btn-export {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      background: #0f172a;
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-export:hover {
+      background: #1e293b;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    }
+
+    .btn-export .material-symbols-outlined { font-size: 18px; }
+
+    /* ─── Download Success Box ─── */
+    #download-box {
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      border: 1px solid #a7f3d0;
+      border-radius: 20px;
+      padding: 28px 32px;
+      display: none;
+    }
+
+    /* ─── Toast ─── */
+    #toast-container {
+      position: fixed; top: 24px; right: 24px;
+      z-index: 9999;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .toast {
+      min-width: 300px;
+      padding: 16px 20px;
+      border-radius: 14px;
+      background: #0f172a;
+      box-shadow: 0 20px 40px -8px rgba(0,0,0,0.25);
+      border-left: 4px solid #10b981;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: toast-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .toast.error { border-left-color: #ef4444; }
+    .toast.info  { border-left-color: #3b82f6; }
+
+    @keyframes toast-in {
+      from { transform: translateX(110%); opacity: 0; }
+      to   { transform: translateX(0);   opacity: 1; }
+    }
+
+    /* ─── Empty State ─── */
+    .empty-state {
+      padding: 64px 24px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      width: 64px; height: 64px;
+      border-radius: 20px;
+      background: #f1f5f9;
+      border: 2px dashed #cbd5e1;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+    }
+
+    /* ─── Collapsible Code Section ─── */
+    details summary {
+      list-style: none;
+      cursor: pointer;
+    }
+    details summary::-webkit-details-marker { display: none; }
+
+    /* ─── Fade-in animation ─── */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-up { animation: fade-up 0.4s ease forwards; }
+
+    input, select, textarea {
+      width: 100% !important;
+      padding: 12px 16px !important;
+      border-radius: 12px !important;
+      border: 1px solid #e2e8f0 !important;
+      background: #fff !important;
+      font: inherit !important;
+      font-size: 14px !important;
+      outline: none !important;
+      transition: all 0.2s ease !important;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: #10b981 !important;
+      box-shadow: 0 0 0 4px rgba(16,185,129,0.1) !important;
+    }
+
+    button { cursor: pointer; }
+
+    .badge-loading {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 999px;
+      font-size: 11px; font-weight: 800;
+      background: #fef9c3; color: #854d0e;
+      border: 1px solid #fde68a;
+    }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div id="toast-container"></div>
+
+  <div class="flex min-h-screen">
+    <!-- ═══════════════════════════════════ SIDEBAR ═══════ -->
+    <aside id="sidebar">
+      <!-- Brand -->
+      <div class="px-6 py-7 flex items-center gap-3 border-b border-white/10">
+        <div class="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
+             style="background: linear-gradient(135deg,#10b981,#059669); box-shadow: 0 4px 12px rgba(16,185,129,0.4);">
+          <span class="material-symbols-outlined text-white text-[20px]">package_2</span>
+        </div>
+        <div>
+          <h2 class="brand-font text-[15px] font-black text-white leading-tight tracking-tight">RAG SaaS</h2>
+          <p class="text-[10px] uppercase tracking-widest font-bold mt-0.5" style="color:#475569">VERSION FACTORY</p>
+        </div>
+      </div>
+
+      <!-- Nav -->
+      <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <button type="button" class="menu-btn active" onclick="location.reload()">
+          <span class="material-symbols-outlined">inventory_2</span>
+          版本打包中心
+        </button>
+        <button type="button" class="menu-btn" onclick="location.href='/admin'">
+          <span class="material-symbols-outlined">arrow_back</span>
+          返回平台后台
+        </button>
+      </nav>
+
+      <!-- Notice -->
+      <div class="p-5 mx-3 mb-4 rounded-2xl" style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);">
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-[16px] mt-0.5" style="color:#10b981">lock</span>
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-wider mb-1" style="color:#10b981">内部工具</p>
+            <p class="text-[11px] leading-relaxed" style="color:#64748b">此工具仅供内部团队使用，不应包含于任何外部交付版本中。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Version tag -->
+      <div class="px-6 pb-5">
+        <span class="text-[10px] font-bold" style="color:#334155">RELEASE MODE</span>
+      </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════ MAIN ═══════════ -->
+    <main id="main-content">
+      <!-- Header -->
+      <header>
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="brand-font text-[22px] font-black text-textMain tracking-tight">版本打包中心</h1>
+            <p class="text-[13px] mt-0.5" style="color:#64748b">选择版本模型，一键导出交付用的 Zip 压缩文件</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
+                 style="background:#fff; border-color:var(--line); font-size:11px; font-weight:800; font-family:monospace; color:#64748b;">
+              <span class="w-2 h-2 rounded-full" style="background:#10b981; box-shadow:0 0 6px rgba(16,185,129,0.6);"></span>
+              READY
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <div class="content-area">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+
+          <!-- ── Left: Auth ── -->
+          <div class="lg:col-span-1">
+            <div class="auth-card">
+              <div class="flex items-center gap-3 mb-6">
+                <div class="h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                     style="background:rgba(16,185,129,0.15);">
+                  <span class="material-symbols-outlined text-[18px]" style="color:#10b981">admin_panel_settings</span>
+                </div>
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-widest" style="color:#475569">STEP 1</p>
+                  <h3 class="brand-font text-sm font-black text-white">管理员认证</h3>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <div>
+                  <label>管理员账号</label>
+                  <input id="admin-user" type="text" value="admin" placeholder="admin">
+                </div>
+                <div>
+                  <label>管理员密码</label>
+                  <input id="admin-pass" type="password" placeholder="请输入密码">
+                </div>
+                <button id="auth-btn" class="btn-auth" onclick="loadProfiles()">
+                  <span class="material-symbols-outlined text-[18px]">key</span>
+                  认证并读取版本
+                </button>
+              </div>
+
+              <div class="mt-6 pt-5" style="border-top: 1px solid rgba(255,255,255,0.07);">
+                <p class="text-[11px] leading-relaxed" style="color:#475569">
+                  使用平台超级管理员账号进行认证，读取所有可导出的版本配置。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Right: Profiles + Download ── -->
+          <div class="lg:col-span-3 space-y-6">
+
+            <!-- Section header -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="h-9 w-9 rounded-xl flex items-center justify-center"
+                     style="background:#0f172a;">
+                  <span class="material-symbols-outlined text-[18px]" style="color:#10b981">view_list</span>
+                </div>
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-widest text-textMuted">STEP 2</p>
+                  <h2 class="brand-font text-base font-black text-textMain">可用导出的版本模型</h2>
+                </div>
+              </div>
+              <span id="profile-count-badge" class="hidden px-3 py-1 rounded-full text-xs font-black"
+                    style="background:#ecfdf5; color:#059669; border:1px solid #a7f3d0;"></span>
+            </div>
+
+            <!-- Profile list -->
+            <div id="profile-list">
+              <!-- Empty state -->
+              <div class="bg-white border border-line rounded-3xl overflow-hidden shadow-sm">
+                <div class="empty-state">
+                  <div class="empty-icon">
+                    <span class="material-symbols-outlined text-[28px]" style="color:#94a3b8">cloud_sync</span>
+                  </div>
+                  <p class="text-sm font-bold text-textMuted">请先完成左侧管理员认证</p>
+                  <p class="text-xs mt-1" style="color:#94a3b8">认证成功后将自动读取所有可导出版本</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Download Result Box -->
+            <div id="download-box"></div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function authHeader() {
+      const user = document.getElementById('admin-user').value.trim();
+      const pass = document.getElementById('admin-pass').value.trim();
+      if (!user || !pass) throw new Error('请先填写平台管理员账号和密码');
+      return 'Basic ' + btoa(user + ':' + pass);
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type === 'error' ? 'error' : type === 'info' ? 'info' : ''}`;
+      const iconMap = { success: 'check_circle', error: 'error', info: 'info' };
+      const colorMap = { success: '#10b981', error: '#ef4444', info: '#3b82f6' };
+      toast.innerHTML = `
+        <span class="material-symbols-outlined" style="color:${colorMap[type] || colorMap.success}; font-size:22px;">${iconMap[type] || iconMap.success}</span>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(110%)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 320);
+      }, 3500);
+    }
+
+    function setStatus(message, type = 'success') {
+      showToast(message, type);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatMode(mode) {
+      if (!mode) return { label: '通用版', cls: 'badge-generic' };
+      const lower = mode.toLowerCase();
+      if (lower.includes('enterprise') || lower.includes('tenant') || lower === 'tenant') return { label: '企业版', cls: 'badge-enterprise' };
+      if (lower.includes('provider') || lower.includes('service') || lower === 'provider') return { label: '服务商版', cls: 'badge-provider' };
+      return { label: escapeHtml(mode), cls: 'badge-generic' };
+    }
+
+    function formatJsonPreview(obj) {
+      if (!obj) return '–';
+      try {
+        return JSON.stringify(obj, null, 2);
+      } catch {
+        return String(obj);
+      }
+    }
+
+    // ── Load Profiles ─────────────────────────────────────────────────────
+    async function loadProfiles() {
+      const btn = document.getElementById('auth-btn');
+      btn.innerHTML = '<span class="spinner"></span> 认证中…';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch('/api/admin/release-profiles', {
+          headers: { 'Authorization': authHeader() }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.msg || '读取版本失败');
+        renderProfiles(data.profiles || [], data.current || {});
+        showToast(`已读取 ${(data.profiles || []).length} 个版本配置`, 'success');
+      } catch (error) {
+        showToast(error.message || '读取失败', 'error');
+      } finally {
+        btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">refresh</span> 重新读取';
+        btn.disabled = false;
+      }
+    }
+
+    // ── Render Profiles ───────────────────────────────────────────────────
+    function renderProfiles(profiles, current) {
+      const box = document.getElementById('profile-list');
+      const badge = document.getElementById('profile-count-badge');
+
+      if (!profiles.length) {
+        box.innerHTML = `
+          <div class="bg-white border border-line rounded-3xl shadow-sm">
+            <div class="empty-state">
+              <div class="empty-icon">
+                <span class="material-symbols-outlined text-[28px]" style="color:#94a3b8">folder_off</span>
+              </div>
+              <p class="text-sm font-bold text-textMuted">当前没有可导出的版本</p>
+              <p class="text-xs mt-1" style="color:#94a3b8">请在后台配置 release-profiles</p>
+            </div>
+          </div>
+        `;
+        badge.classList.add('hidden');
+        return;
+      }
+
+      badge.textContent = `${profiles.length} 个版本`;
+      badge.classList.remove('hidden');
+
+      box.innerHTML = profiles.map((profile, index) => {
+        const mode = formatMode(profile.deployment_mode);
+        const isCurrentMode = current.deployment_mode === profile.deployment_mode;
+        const entriesText = formatJsonPreview(profile.entries);
+        const menusText   = formatJsonPreview(profile.menus);
+
+        return `
+          <div class="profile-card animate-fade-up" style="animation-delay:${index * 0.07}s;">
+            <div class="profile-card-header">
+              <div>
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="profile-badge ${mode.cls}">${mode.label}</span>
+                  ${isCurrentMode ? '<span class="profile-badge" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a">当前母版</span>' : ''}
+                </div>
+                <h3 class="brand-font text-base font-black text-textMain">${escapeHtml(profile.label)}</h3>
+                ${profile.summary ? `<p class="text-sm mt-1" style="color:#64748b">${escapeHtml(profile.summary)}</p>` : ''}
+              </div>
+              <div class="flex-shrink-0">
+                <div class="h-10 w-10 rounded-xl flex items-center justify-center"
+                     style="background:${mode.cls === 'badge-enterprise' ? '#ecfdf5' : mode.cls === 'badge-provider' ? '#eff6ff' : '#f8fafc'};">
+                  <span class="material-symbols-outlined text-[20px]"
+                        style="color:${mode.cls === 'badge-enterprise' ? '#059669' : mode.cls === 'badge-provider' ? '#2563eb' : '#64748b'}">
+                    ${mode.cls === 'badge-enterprise' ? 'corporate_fare' : mode.cls === 'badge-provider' ? 'handshake' : 'inventory_2'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="profile-card-body space-y-4">
+              <details>
+                <summary class="flex items-center justify-between text-xs font-black text-textMuted uppercase tracking-wider py-1 select-none hover:text-textMain transition-colors">
+                  <span class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[14px]">alt_route</span>
+                    入口配置
+                  </span>
+                  <span class="material-symbols-outlined text-[14px]">expand_more</span>
+                </summary>
+                <div class="code-block mt-2"><pre style="white-space:pre-wrap;word-break:break-all;">${escapeHtml(entriesText)}</pre></div>
+              </details>
+
+              <details>
+                <summary class="flex items-center justify-between text-xs font-black text-textMuted uppercase tracking-wider py-1 select-none hover:text-textMain transition-colors">
+                  <span class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[14px]">menu_open</span>
+                    菜单结构
+                  </span>
+                  <span class="material-symbols-outlined text-[14px]">expand_more</span>
+                </summary>
+                <div class="code-block mt-2"><pre style="white-space:pre-wrap;word-break:break-all;">${escapeHtml(menusText)}</pre></div>
+              </details>
+            </div>
+
+            <div class="profile-card-footer">
+              <span class="text-xs font-bold" style="color:#94a3b8">
+                KEY: <span class="font-mono" style="color:#64748b">${escapeHtml(profile.key || profile.label)}</span>
+              </span>
+              <button class="btn-export" onclick="exportBundle('${escapeHtml(profile.key || profile.label)}', this)">
+                <span class="material-symbols-outlined text-[18px]">download</span>
+                导出 ${escapeHtml(profile.label)}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ── Export Bundle ─────────────────────────────────────────────────────
+    async function exportBundle(profileKey, btn) {
+      const origHTML = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner" style="border-top-color:#fff;width:16px;height:16px;"></span> 打包中…';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch('/api/admin/release/export', {
+          method: 'POST',
+          headers: {
+            'Authorization': authHeader(),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ profile_key: profileKey })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.msg || '导出失败');
+
+        const box = document.getElementById('download-box');
+        box.style.display = 'block';
+        box.innerHTML = `
+          <div class="flex items-start gap-4">
+            <div class="h-12 w-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                 style="background:#10b981; box-shadow:0 4px 16px rgba(16,185,129,0.3);">
+              <span class="material-symbols-outlined text-white text-[24px]">task_alt</span>
+            </div>
+            <div class="flex-1">
+              <p class="text-[11px] font-black uppercase tracking-widest mb-1" style="color:#059669">导出成功</p>
+              <h3 class="brand-font text-lg font-black text-textMain">${escapeHtml(data.profile?.label || profileKey)}</h3>
+              <p class="text-sm mt-1" style="color:#64748b">压缩包：<span class="font-mono font-bold">${escapeHtml(data.zip_name || '')}</span></p>
+            </div>
+            <a href="${escapeHtml(data.download_url || '')}"
+               class="flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm text-white"
+               style="background:#059669; box-shadow:0 4px 12px rgba(5,150,105,0.3); text-decoration:none; transition:all 0.2s;"
+               onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+              <span class="material-symbols-outlined text-[18px]">download</span>
+              下载版本包
+            </a>
+          </div>
+        `;
+        showToast(data.msg || '导出成功，请下载版本包', 'success');
+      } catch (error) {
+        showToast(error.message || '导出失败', 'error');
+      } finally {
+        btn.innerHTML = origHTML;
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

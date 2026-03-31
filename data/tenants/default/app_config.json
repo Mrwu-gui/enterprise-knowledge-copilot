@@ -1,0 +1,50 @@
+{
+  "app_id": "default",
+  "app_name": "默认租户",
+  "app_subtitle": "企业级 RAG 与三层知识库平台",
+  "chat_title": "默认租户",
+  "chat_tagline": "连接私有知识、流程文档与实时资讯",
+  "welcome_message": "你好，欢迎来到你的专属知识助理。你可以直接问制度、SOP、产品资料、操作手册或最新公告。",
+  "recommended_questions": [
+    "报销流程怎么走？",
+    "新员工入职需要完成哪些步骤？",
+    "合同审批规范是什么？"
+  ],
+  "login_hint": "企业账号登录 · 首次接入后请在后台完成密码与品牌配置",
+  "input_placeholder": "输入你的问题...",
+  "send_button_text": "发送",
+  "record_chat_logs": true,
+  "knowledge_namespace": "default",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f6f1df",
+    "bg_soft": "#fffaf0",
+    "surface": "rgba(255, 252, 244, 0.9)",
+    "surface_strong": "#fffef8",
+    "line": "#eadbb8",
+    "text": "#4c3e2c",
+    "muted": "#866f59",
+    "accent": "#13b6ad",
+    "accent_strong": "#0f9692",
+    "accent_soft": "rgba(19, 182, 173, 0.14)",
+    "warm": "#f3c067",
+    "warm_soft": "rgba(243, 192, 103, 0.2)",
+    "danger": "#d06b5a"
+  }
+}

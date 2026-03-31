@@ -1,0 +1,19 @@
+[
+  {
+    "source_id": "py_001",
+    "name": "移动01",
+    "url": "http://127.0.0.1:8010/crawler_test_chinaunicom.html",
+    "tier": "permanent",
+    "source_type": "web",
+    "confidence": "B",
+    "parser": "generic",
+    "refresh_hours": 24,
+    "frequency": "daily",
+    "auto_ingest": false,
+    "manual_review": false,
+    "required_any_keywords": [],
+    "rule_text": "",
+    "notes": "",
+    "questions": []
+  }
+]
