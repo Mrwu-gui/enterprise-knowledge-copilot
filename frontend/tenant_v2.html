@@ -4329,7 +4329,9 @@
               <div id="tenant-chunk-detail-meta" class="knowledge-editor-meta" style="padding:10px 20px;font-size:12px;"></div>
               <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:0;overflow:hidden;background:var(--surface);min-height:0;margin:0 20px 20px;">
                 <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);">
-                  <div style="padding:12px 16px;border-bottom:1px solid var(--line);font-size:12px;font-weight:700;color:var(--textMain);background:#fafafa;">原文内容</div>
+                  <div style="padding:12px 16px;border-bottom:1px solid var(--line);font-size:12px;font-weight:700;color:var(--textMain);background:#fafafa;">智能解析视图</div>
+                  <div id="tenant-chunk-smart-preview" style="padding:16px;overflow:auto;border-bottom:1px solid var(--line);background:#fcfcfc;max-height:42%;"></div>
+                  <div style="padding:12px 16px;border-bottom:1px solid var(--line);font-size:12px;font-weight:700;color:var(--textMain);background:#fafafa;">索引原文</div>
                   <div id="tenant-chunk-original-content" style="flex:1;padding:16px;overflow:auto;white-space:pre-wrap;line-height:1.7;color:var(--textMain);font-size:12px;"></div>
                 </div>
                 <div style="display:flex;flex-direction:column;min-height:0;">
@@ -5559,6 +5561,22 @@
           <label class="field-label" for="tenant-upload-category-select" style="font-size:12px;font-weight:600;">目标分类</label>
           <select id="tenant-upload-category-select" class="knowledge-editor-select"></select>
         </div>
+        <div class="upload-modal-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <label class="field-label" style="font-size:12px;font-weight:600;margin:0;">文档标签</label>
+            <button class="link-btn" type="button" onclick="openKnowledgeTagManager()" style="font-size:12px;padding:0;">管理标签</button>
+          </div>
+          <div class="knowledge-editor-tag-box">
+          <div class="knowledge-editor-tag-row">
+            <select id="tenant-upload-tag-group" onchange="renderTenantUploadTagValueOptions()">
+              <option value="">选择标签组</option>
+            </select>
+            <select id="tenant-upload-tag-value" onchange="addUploadTagFromSelect()">
+              <option value="">选择标签值</option>
+            </select>
+          </div>
+          </div>
+        </div>
         <div id="tenant-upload-file-mode">
           <div class="upload-modal-section">
             <label class="field-label" style="font-size:12px;font-weight:600;">上传文件</label>
@@ -5576,20 +5594,13 @@
             <textarea id="tenant-upload-web-urls" placeholder="每行一个网页地址，例如：&#10;https://example.com/article/1&#10;https://example.com/article/2" style="min-height:100px;font-size:12px;"></textarea>
           </div>
         </div>
-        <div class="upload-modal-section">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <label class="field-label" style="font-size:12px;font-weight:600;margin:0;">文档标签</label>
-            <button class="link-btn" type="button" onclick="openKnowledgeTagManager()" style="font-size:12px;padding:0;">管理标签</button>
+        <div class="upload-modal-section" style="padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fafafa;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">hub</span>
+            <div style="font-size:12px;font-weight:700;color:var(--textMain);">系统自动解析</div>
           </div>
-          <div class="knowledge-editor-tag-box">
-          <div class="knowledge-editor-tag-row">
-            <select id="tenant-upload-tag-group" onchange="renderTenantUploadTagValueOptions()">
-              <option value="">选择标签组</option>
-            </select>
-            <select id="tenant-upload-tag-value" onchange="addUploadTagFromSelect()">
-              <option value="">选择标签值</option>
-            </select>
-          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted);line-height:1.7;">
+            导入后系统会自动按文件类型选择合适链路处理，例如表格类文档走结构化解析，PDF 自动区分文本/扫描/表格特征，图片走 OCR，JSON/XML/日志也会自动选择对应方式。
           </div>
         </div>
       </div>
@@ -7513,8 +7524,9 @@
               <tr>
                 <td>
                   <div class="kb-table-name">
-                    <span class="material-symbols-outlined">description</span>
+                    <span class="material-symbols-outlined">${getKnowledgeSourceIcon(file.source_type, file.display_mode)}</span>
                     <span title="${esc(file.name)}">${esc(file.name.length > 30 ? file.name.slice(0, 30) + '...' : file.name)}</span>
+                    <span class="knowledge-tag-chip" style="margin-left:8px;">${esc(String((file.original_suffix || file.source_type || 'md')).replace(/^\./, '').toUpperCase())}</span>
                   </div>
                 </td>
                 <td>
@@ -8065,7 +8077,6 @@
       syncTenantKnowledgeView();
       renderTenantUploadCategoryOptions();
       renderTenantUploadTagSuggestions();
-      renderTenantUploadTagChips();
       renderTenantAgentLibraryScopeOptions();
       renderTenantAgentCategoryScopeOptions();
       renderTenantAgentTagScopeOptions();
@@ -8079,7 +8090,6 @@
       tenantEditingCategoryId = '';
       document.getElementById('tenant-knowledge-editor').classList.add('hidden');
       document.getElementById('tenant-editor-meta').textContent = '当前未选择文件。';
-      document.getElementById('tenant-editor-tags-chips').innerHTML = '';
       const groupSelect = document.getElementById('tenant-editor-tag-group');
       const valueSelect = document.getElementById('tenant-editor-tag-value');
       if (groupSelect) groupSelect.value = '';
@@ -8102,7 +8112,6 @@
       const currentCategory = getCurrentKnowledgeCategory();
       renderTenantUploadCategoryOptions();
       renderTenantUploadMode();
-      renderTenantUploadTagChips();
       renderTenantUploadTagSuggestions();
       document.getElementById('tenant-upload-file-input').value = '';
       document.getElementById('tenant-upload-web-urls').value = '';
@@ -8121,17 +8130,19 @@
       modal?.classList.add('hidden');
       tenantUploadModalFile = null;
       tenantUploadTagDraft = [];
-      renderTenantUploadTagChips();
       renderTenantUploadTagSuggestions();
     }
 
     function bindTenantKnowledgeUiEvents() {
-
-
       const cancelBtn = document.getElementById('tenant-upload-cancel-btn');
       if (cancelBtn && cancelBtn.dataset.bound !== '1') {
         cancelBtn.dataset.bound = '1';
         cancelBtn.addEventListener('click', closeTenantUploadModal);
+      }
+      const confirmBtn = document.getElementById('tenant-upload-confirm-btn');
+      if (confirmBtn && confirmBtn.dataset.bound !== '1') {
+        confirmBtn.dataset.bound = '1';
+        confirmBtn.addEventListener('click', confirmTenantUpload);
       }
     }
 
@@ -8511,7 +8522,6 @@
         renderTenantEditorCategoryOptions(data.library_id);
         renderTenantEditorTagGroupOptions();
         renderTenantEditorTagValueOptions();
-        renderTenantEditorTagChips();
         editorContent.value = data.content || '';
         requestAnimationFrame(() => {
           editorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -8834,7 +8844,12 @@
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.ok) throw new Error(data.msg || '解析失败');
         tenantChunkDetail = data;
-        document.getElementById('tenant-chunk-detail-meta').textContent = `${data.file} · ${((Number(data.size || 0)) / 1024).toFixed(1)}KB · ${Number(data.chunk_count || 0)} 个切片`;
+        const extraMeta = [
+          getKnowledgeSourceTypeLabel(data.source_type, data.display_mode),
+          Array.isArray(data.parser_chain) && data.parser_chain.length ? `链路：${data.parser_chain.join(' -> ')}` : '',
+        ].filter(Boolean).join(' · ');
+        document.getElementById('tenant-chunk-detail-meta').textContent = `${data.file} · ${((Number(data.size || 0)) / 1024).toFixed(1)}KB · ${Number(data.chunk_count || 0)} 个切片${extraMeta ? ` · ${extraMeta}` : ''}`;
+        renderTenantChunkSmartPreview();
         document.getElementById('tenant-chunk-original-content').textContent = data.content || '';
         document.getElementById('tenant-chunk-search').value = '';
         renderTenantChunkRows();
@@ -8843,6 +8858,126 @@
       } catch (error) {
         tenantShowToast(`❌ 读取解析详情失败：${error.message}`, 'error');
       }
+    }
+
+    function getKnowledgeSourceTypeLabel(sourceType, displayMode = '') {
+      const normalized = String(displayMode || sourceType || '').toLowerCase();
+      const labels = {
+        table: '表格解析',
+        csv: 'CSV 结构化解析',
+        xlsx: 'Excel 结构化解析',
+        xls: 'Excel 结构化解析',
+        json: 'JSON 结构化解析',
+        xml: 'XML 结构化解析',
+        log: '日志解析',
+        pdf: 'PDF 文档解析',
+        image_ocr: '图片 OCR 解析',
+        png: '图片 OCR 解析',
+        jpg: '图片 OCR 解析',
+        jpeg: '图片 OCR 解析',
+        office: 'Office 文档解析',
+        docx: 'Word 文档解析',
+        pptx: 'PPT 文档解析',
+        web: '网页文档解析',
+        html: '网页文档解析',
+        htm: '网页文档解析',
+        text: '文本解析',
+        md: 'Markdown 解析',
+        txt: '文本解析',
+      };
+      return labels[normalized] || (sourceType ? `${String(sourceType).toUpperCase()} 解析` : '通用文档解析');
+    }
+
+    function getKnowledgeSourceIcon(sourceType, displayMode = '') {
+      const normalized = String(displayMode || sourceType || '').toLowerCase();
+      if (['table', 'csv', 'xlsx', 'xls'].includes(normalized)) return 'table_chart';
+      if (normalized === 'json') return 'data_object';
+      if (normalized === 'xml') return 'code_blocks';
+      if (normalized === 'log') return 'article';
+      if (normalized === 'pdf') return 'picture_as_pdf';
+      if (['image_ocr', 'png', 'jpg', 'jpeg'].includes(normalized)) return 'image_search';
+      if (['web', 'html', 'htm'].includes(normalized)) return 'language';
+      if (normalized === 'pptx') return 'slideshow';
+      return 'description';
+    }
+
+    function renderTenantChunkSmartPreview() {
+      const root = document.getElementById('tenant-chunk-smart-preview');
+      if (!root) return;
+      const preview = tenantChunkDetail?.preview && typeof tenantChunkDetail.preview === 'object' ? tenantChunkDetail.preview : {};
+      const displayMode = String(tenantChunkDetail?.display_mode || preview.display_mode || '').toLowerCase();
+      const outline = Array.isArray(preview.outline) ? preview.outline : [];
+      const tables = Array.isArray(preview.tables) ? preview.tables : [];
+      const excerpt = String(preview.excerpt || '').trim();
+      const header = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <span class="material-symbols-outlined" style="font-size:20px;color:var(--primary);">${getKnowledgeSourceIcon(tenantChunkDetail?.source_type, displayMode)}</span>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--textMain);">${esc(getKnowledgeSourceTypeLabel(tenantChunkDetail?.source_type, displayMode))}</div>
+            <div style="font-size:11px;color:var(--muted);">${esc(String(tenantChunkDetail?.original_suffix || tenantChunkDetail?.source_type || '').toUpperCase() || '文档')}</div>
+          </div>
+        </div>
+      `;
+      if (displayMode === 'table') {
+        root.innerHTML = header + (tables.length ? tables.map((table) => `
+          <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
+            <div style="padding:10px 12px;background:#f8fafc;font-size:12px;font-weight:700;color:var(--textMain);display:flex;justify-content:space-between;gap:12px;">
+              <span>${esc(table.name || '结构化表')}</span>
+              <span style="color:var(--muted);font-weight:500;">约 ${Number(table.row_count || 0)} 行</span>
+            </div>
+            <div style="overflow:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr>${(Array.isArray(table.columns) ? table.columns : []).map((col) => `<th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);background:#fcfcfc;">${esc(col || '-')}</th>`).join('')}</tr>
+                </thead>
+                <tbody>
+                  ${(Array.isArray(table.rows) ? table.rows : []).map((row) => `<tr>${row.map((cell) => `<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:top;">${esc(cell || '-')}</td>`).join('')}</tr>`).join('') || `<tr><td style="padding:10px;color:var(--muted);" colspan="${Math.max(1, (table.columns || []).length)}">当前表没有可展示的数据样本</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `).join('') : '<div class="knowledge-empty-note">当前文件已按表格链路处理，但暂无可展示的结构化样本。</div>');
+        return;
+      }
+      const blocks = [];
+      if (displayMode === 'pdf' && preview.page_count) {
+        blocks.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">共识别 ${Number(preview.page_count || 0)} 页，已将正文与表格一起纳入切片。</div>`);
+      }
+      if (outline.length) {
+        blocks.push(`
+          <div style="margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--textMain);margin-bottom:8px;">文档结构</div>
+            <div style="display:grid;gap:6px;">
+              ${outline.map((item, index) => `<div style="font-size:12px;color:var(--textMain);padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;">${index + 1}. ${esc(item)}</div>`).join('')}
+            </div>
+          </div>
+        `);
+      }
+      if (tables.length) {
+        blocks.push(`
+          <div style="margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--textMain);margin-bottom:8px;">结构化表格样本</div>
+            <div style="display:grid;gap:10px;">
+              ${tables.map((table) => `
+                <div style="padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;">
+                  <div style="font-size:12px;font-weight:700;color:var(--textMain);margin-bottom:8px;">${esc(table.name || '表格样本')}</div>
+                  <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">字段：${esc((table.columns || []).join(' / ') || '-')}</div>
+                  ${Array.isArray(table.rows) && table.rows.length ? `<div style="font-size:11px;color:var(--textMain);line-height:1.7;">${table.rows.map((row) => esc(row.join(' | '))).join('<br>')}</div>` : '<div style="font-size:11px;color:var(--muted);">暂无样本行</div>'}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `);
+      }
+      if (excerpt) {
+        blocks.push(`
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--textMain);margin-bottom:8px;">解析摘要</div>
+            <div style="font-size:12px;color:var(--textMain);line-height:1.8;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;white-space:pre-wrap;">${esc(excerpt)}</div>
+          </div>
+        `);
+      }
+      root.innerHTML = header + (blocks.join('') || '<div class="knowledge-empty-note">当前文件没有额外的结构化解析摘要，已按通用文档方式入库。</div>');
     }
 
     function renderTenantChunkRows() {
@@ -8855,6 +8990,7 @@
         <div style="padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--bg);display:grid;gap:12px;">
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="knowledge-tag-chip">切片${Number(chunk.index || 0)}</span>
+            ${chunk.meta && chunk.meta.structured ? `<span class="knowledge-tag-chip">${esc(String(chunk.meta.structured))}</span>` : ''}
             ${chunk.meta && Object.keys(chunk.meta).length ? `<span class="meta">${esc(JSON.stringify(chunk.meta))}</span>` : ''}
           </div>
           <div style="white-space:pre-wrap;line-height:1.8;color:var(--textMain);">${esc(chunk.text || '')}</div>
@@ -8867,6 +9003,8 @@
       const modal = document.getElementById('tenant-chunk-detail-modal');
       modal?.classList.add('hidden');
       tenantChunkDetail = null;
+      const previewRoot = document.getElementById('tenant-chunk-smart-preview');
+      if (previewRoot) previewRoot.innerHTML = '';
     }
 
     function tenantEmptyState(text) {

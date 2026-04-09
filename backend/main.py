@@ -2171,6 +2171,9 @@ async def tenant_get_knowledge_file_content(request: Request, tier: str = "", fi
         "tags": meta.get("tags", []),
         "library_id": meta.get("library_id", ""),
         "category_id": meta.get("category_id", ""),
+        "source_type": meta.get("source_type", ""),
+        "display_mode": meta.get("display_mode", ""),
+        "preview": meta.get("preview", {}),
     }
 
 
@@ -2212,6 +2215,7 @@ async def tenant_knowledge_file_chunks(request: Request):
         content = Path(fpath).read_text(encoding="utf-8")
     except Exception:
         content = Path(fpath).read_text(encoding="utf-8", errors="ignore")
+    meta = get_knowledge_file_meta(tenant["tenant_id"], canonical_tier, file, tenant.get("tenant_name", ""))
     try:
         chunks = split_documents_for_stats(content)
     except Exception:
@@ -2229,6 +2233,11 @@ async def tenant_knowledge_file_chunks(request: Request):
         "size": os.path.getsize(fpath),
         "chunk_count": len(chunks),
         "content": content,
+        "source_type": meta.get("source_type", ""),
+        "original_suffix": meta.get("original_suffix", ""),
+        "display_mode": meta.get("display_mode", ""),
+        "parser_chain": meta.get("parser_chain", []),
+        "preview": meta.get("preview", {}),
         "chunks": [
             {
                 "index": index + 1,
@@ -2317,6 +2326,7 @@ async def tenant_upload_knowledge(request: Request, file: UploadFile = File(...)
         tags=upload_tags,
         library_id=library_id,
         category_id=category_id,
+        asset_meta=parsed.ingest_metadata,
         tenant_name=tenant.get("tenant_name", ""),
     )
     return {

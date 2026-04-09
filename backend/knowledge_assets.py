@@ -14,6 +14,18 @@ PUBLIC_TIER_CODE_MAP = {
     "hotfix": "L3",
 }
 
+FILE_META_EXTRA_KEYS = {
+    "source_type",
+    "original_suffix",
+    "display_mode",
+    "parser_chain",
+    "parse_mode",
+    "pdf_mode",
+    "table_header_mode",
+    "preview",
+    "source_name",
+}
+
 
 def _public_tier_code(value: str) -> str:
     canonical = normalize_tier(value)
@@ -181,6 +193,22 @@ def _normalize_category_records(entries: list[dict] | None, libraries: list[dict
     return result
 
 
+def _extract_file_meta_extras(raw: dict | None) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    extras: dict = {}
+    for key in FILE_META_EXTRA_KEYS:
+        value = raw.get(key)
+        if value in (None, "", [], {}):
+            continue
+        if key == "parser_chain" and not isinstance(value, list):
+            continue
+        if key == "preview" and not isinstance(value, dict):
+            continue
+        extras[key] = value
+    return extras
+
+
 def load_knowledge_metadata(tenant_id: str, tenant_name: str = "") -> dict:
     ensure_tenant_storage(tenant_id, tenant_name or tenant_id)
     path = get_tenant_knowledge_metadata_path(tenant_id)
@@ -219,6 +247,7 @@ def load_knowledge_metadata(tenant_id: str, tenant_name: str = "") -> dict:
             "tags": _normalize_tags(value.get("tags") if isinstance(value.get("tags"), list) else []),
             "library_id": library_id,
             "category_id": category_id,
+            **_extract_file_meta_extras(value),
         }
     return {
         "catalog": normalized_catalog,
@@ -264,6 +293,7 @@ def save_knowledge_metadata(tenant_id: str, metadata: dict, tenant_name: str = "
                 "tags": _normalize_tags(value.get("tags") if isinstance(value.get("tags"), list) else []),
                 "library_id": library_id,
                 "category_id": category_id,
+                **_extract_file_meta_extras(value),
             }
     catalog_groups = [dict(item) for item in (normalized.get("catalog") or []) if isinstance(item, dict)]
     known_values = set(_flatten_tag_group_values(catalog_groups))
@@ -322,6 +352,7 @@ def set_knowledge_file_meta(
     tags: list[str] | tuple[str, ...] | set[str] | None = None,
     library_id: str = "",
     category_id: str = "",
+    asset_meta: dict | None = None,
     tenant_name: str = "",
 ) -> dict:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
@@ -342,6 +373,8 @@ def set_knowledge_file_meta(
         "tags": _normalize_tags(tags if tags is not None else existing.get("tags")),
         "library_id": library_id,
         "category_id": category_id,
+        **_extract_file_meta_extras(existing),
+        **_extract_file_meta_extras(asset_meta),
     }
     catalog_groups = [dict(item) for item in (metadata.get("catalog") or []) if isinstance(item, dict)]
     known_values = set(_flatten_tag_group_values(catalog_groups))
