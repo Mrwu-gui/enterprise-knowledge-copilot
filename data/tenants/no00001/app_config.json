@@ -45,8 +45,8 @@
     }
   },
   "theme": {
-    "primary": "#10b78d",
-    "primary_deep": "#059483",
-    "primary_soft": "#edfdfd"
+    "primary": "#1048b7",
+    "primary_deep": "#054f94",
+    "primary_soft": "#edfdf2"
   }
 }

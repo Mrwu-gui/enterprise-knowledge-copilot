@@ -50,6 +50,14 @@ def _tenant_tool_config_path(tenant_id: str) -> Path:
     return _tenant_root(tenant_id) / "tool_config.json"
 
 
+def _tenant_workflow_config_path(tenant_id: str) -> Path:
+    return _tenant_root(tenant_id) / "workflow_config.json"
+
+
+def _tenant_knowledge_metadata_path(tenant_id: str) -> Path:
+    return _tenant_root(tenant_id) / "knowledge_metadata.json"
+
+
 def _default_tenant_config(tenant_id: str, tenant_name: str) -> dict:
     cfg = copy.deepcopy(DEFAULT_APP_CONFIG)
     cfg["app_id"] = tenant_id
@@ -109,6 +117,20 @@ def ensure_tenant_storage(tenant_id: str, tenant_name: str) -> None:
     tenant_tool_path = _tenant_tool_config_path(tenant_id)
     if not tenant_tool_path.exists() and PLATFORM_TOOL_CONFIG_PATH.exists():
         shutil.copyfile(PLATFORM_TOOL_CONFIG_PATH, tenant_tool_path)
+
+    tenant_workflow_path = _tenant_workflow_config_path(tenant_id)
+    if not tenant_workflow_path.exists():
+        tenant_workflow_path.write_text(
+            json.dumps({"default_workflow_id": "", "items": []}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    tenant_knowledge_meta_path = _tenant_knowledge_metadata_path(tenant_id)
+    if not tenant_knowledge_meta_path.exists():
+        tenant_knowledge_meta_path.write_text(
+            json.dumps({"items": {}}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
 
 def load_tenant_app_config(tenant_id: str, tenant_name: str) -> dict:
@@ -172,6 +194,7 @@ def get_tenant_paths(tenant_id: str) -> dict:
         "retrieval_config": str(_tenant_retrieval_config_path(tenant_id)),
         "crawler_config": str(_tenant_crawler_config_path(tenant_id)),
         "tool_config": str(_tenant_tool_config_path(tenant_id)),
+        "workflow_config": str(_tenant_workflow_config_path(tenant_id)),
     }
 
 
@@ -204,3 +227,13 @@ def get_tenant_crawler_config_path(tenant_id: str) -> Path:
 def get_tenant_tool_config_path(tenant_id: str) -> Path:
     """返回租户自己的工具配置路径。"""
     return _tenant_tool_config_path(tenant_id)
+
+
+def get_tenant_workflow_config_path(tenant_id: str) -> Path:
+    """返回租户自己的工作流配置路径。"""
+    return _tenant_workflow_config_path(tenant_id)
+
+
+def get_tenant_knowledge_metadata_path(tenant_id: str) -> Path:
+    """返回租户知识资产元数据路径。"""
+    return _tenant_knowledge_metadata_path(tenant_id)

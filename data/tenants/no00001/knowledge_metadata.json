@@ -1,0 +1,52 @@
+{
+  "catalog": [
+    {
+      "tag_id": "tag_1775706003221_4c78f2",
+      "name": "科室",
+      "values": [
+        {
+          "value_id": "tagv_1775706003221_fcf618",
+          "name": "心内科",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_1775706021293_6cc70a",
+          "name": "五官科",
+          "synonyms": []
+        }
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "library_id": "kb_d13c5f08a2",
+      "name": "辅助1",
+      "description": "付诸 2"
+    }
+  ],
+  "categories": [
+    {
+      "category_id": "cat_f20c84edef",
+      "library_id": "kb_d13c5f08a2",
+      "name": "检验报告"
+    },
+    {
+      "category_id": "cat_57fa6aee28",
+      "library_id": "kb_d13c5f08a2",
+      "name": "医学影像"
+    }
+  ],
+  "items": {
+    "hotfix/中国联通_Word测试文档.md": {
+      "tier": "hotfix",
+      "tier_code": "L3",
+      "file": "中国联通_Word测试文档.md",
+      "tags": [
+        "心内科",
+        "五官科"
+      ],
+      "library_id": "kb_d13c5f08a2",
+      "category_id": "cat_57fa6aee28"
+    }
+  }
+}

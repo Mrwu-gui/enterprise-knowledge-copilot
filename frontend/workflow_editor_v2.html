@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>工作流编排 · 企业级 RAG SaaS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { colors: { primary: '#10b981', surface: '#f8fafc', line: '#e2e8f0', textMain: '#0f172a', textMuted: '#64748b' } } } };
+    </script>
+    <style>
+        body { font-family: "Inter", sans-serif; background: #f8fafc; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .canvas { background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 20px 20px; flex: 1; position: relative; overflow: hidden; }
+        .node { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; position: absolute; width: 160px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); cursor: move; }
+    </style>
+</head>
+<body>
+    <header class="h-16 bg-white border-b border-line flex items-center justify-between px-6 z-10">
+        <div class="flex items-center gap-4">
+            <button onclick="history.back()" class="flex items-center text-sm font-bold text-slate-500 hover:text-emerald-600 transition">
+                <span class="material-symbols-outlined">arrow_back</span> 返回列表
+            </button>
+            <div class="h-6 w-px bg-line"></div>
+            <h1 class="text-lg font-black text-textMain">用户投诉自动化处理 <span class="text-xs font-bold text-textMuted bg-slate-100 px-2 py-1 rounded ml-2">V1.2</span></h1>
+        </div>
+        <div class="flex gap-2">
+            <button class="bg-surface text-slate-700 px-4 py-2 rounded-lg text-sm font-bold border hover:border-slate-300 transition">测试运行</button>
+            <button class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition">保存并发布</button>
+        </div>
+    </header>
+    
+    <div class="flex flex-1">
+        <aside class="w-64 bg-white border-r border-line p-4 space-y-4 z-10 shadow-sm">
+            <h2 class="text-xs font-black uppercase text-textMuted tracking-widest mb-4">组件面板</h2>
+            <div class="grid gap-2">
+                <div class="p-3 border rounded-xl flex items-center gap-3 cursor-grab hover:bg-emerald-50 hover:border-emerald-200 transition">
+                    <span class="material-symbols-outlined text-emerald-600">play_circle</span>
+                    <span class="text-sm font-bold text-textMain">开始节点</span>
+                </div>
+                <div class="p-3 border rounded-xl flex items-center gap-3 cursor-grab hover:bg-emerald-50 hover:border-emerald-200 transition">
+                    <span class="material-symbols-outlined text-blue-600">smart_toy</span>
+                    <span class="text-sm font-bold text-textMain">AI处理节点</span>
+                </div>
+                <div class="p-3 border rounded-xl flex items-center gap-3 cursor-grab hover:bg-emerald-50 hover:border-emerald-200 transition">
+                    <span class="material-symbols-outlined text-amber-600">storage</span>
+                    <span class="text-sm font-bold text-textMain">知识检索</span>
+                </div>
+                <div class="p-3 border rounded-xl flex items-center gap-3 cursor-grab hover:bg-emerald-50 hover:border-emerald-200 transition">
+                    <span class="material-symbols-outlined text-purple-600">fork_right</span>
+                    <span class="text-sm font-bold text-textMain">条件判断</span>
+                </div>
+                <div class="p-3 border rounded-xl flex items-center gap-3 cursor-grab hover:bg-emerald-50 hover:border-emerald-200 transition">
+                    <span class="material-symbols-outlined text-rose-600">approval</span>
+                    <span class="text-sm font-bold text-textMain">人工审核</span>
+                </div>
+                <div class="p-3 border rounded-xl flex items-center gap-3 cursor-grab hover:bg-emerald-50 hover:border-emerald-200 transition">
+                    <span class="material-symbols-outlined text-slate-600">stop_circle</span>
+                    <span class="text-sm font-bold text-textMain">结束</span>
+                </div>
+            </div>
+        </aside>
+        
+        <main class="canvas p-8">
+            <div class="node" style="left: 100px; top: 100px;">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="material-symbols-outlined text-emerald-600">play_circle</span>
+                    <span class="text-xs font-bold text-textMain">开始</span>
+                </div>
+            </div>
+            <div class="node" style="left: 350px; top: 100px;">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="material-symbols-outlined text-blue-600">smart_toy</span>
+                    <span class="text-xs font-bold text-textMain">AI客服处理</span>
+                </div>
+            </div>
+        </main>
+        
+        <aside class="w-80 bg-white border-l border-line p-6 z-10 shadow-sm">
+            <h2 class="text-xs font-black uppercase text-textMuted mb-4">属性配置</h2>
+            <div class="text-sm text-textMuted bg-slate-50 p-4 rounded-xl border border-dashed">请点击画布中的节点以进行详细配置。</div>
+        </aside>
+    </div>
+</body>
+</html>

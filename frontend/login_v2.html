@@ -205,6 +205,33 @@
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .error-text { color: var(--danger); font-size: 14px; margin-top: 14px; min-height: 20px; }
     .footer-note { margin-top: 16px; font-size: 12px; text-align: center; color: var(--muted); }
+    .remember-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .remember-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    .remember-option input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      padding: 0;
+      border-radius: 4px;
+      box-shadow: none;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
     .quick-box {
       margin-top: 14px;
       padding: 16px 18px;
@@ -422,6 +449,16 @@
           <span class="label">密码</span>
           <input id="password-input" type="password" placeholder="请输入密码" maxlength="32" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter') doAuth()">
         </label>
+        <div class="remember-row">
+          <label class="remember-option">
+            <input id="remember-account" type="checkbox">
+            <span>记住账号</span>
+          </label>
+          <label class="remember-option">
+            <input id="remember-password" type="checkbox">
+            <span>30天免输密码</span>
+          </label>
+        </div>
         <button id="auth-btn" onclick="doAuth()">验证并进入聊天页</button>
         <div id="auth-error" class="error-text"></div>
         <div class="footer-note">前台登录后会自动进入企业专属知识问答界面。</div>
@@ -444,10 +481,30 @@
   </div>
 
   <script>
+    const AUTH_PHONE_KEY = 'auth_phone';
+    const AUTH_PASSWORD_KEY = 'auth_password';
+    const AUTH_REMEMBER_ACCOUNT_KEY = 'auth_remember_account';
+    const AUTH_REMEMBER_PASSWORD_KEY = 'auth_remember_password';
+    const AUTH_PASSWORD_EXPIRES_KEY = 'auth_password_expires_at';
+    const currentAgentId = new URLSearchParams(window.location.search).get('agent_id') || '';
+
+    function createFallbackUUID() {
+      const randomPart = Math.random().toString(36).slice(2, 10);
+      return `DEV-${Date.now()}-${randomPart}`;
+    }
+
     function getUUID() {
       let uuid = localStorage.getItem('device_uuid');
       if (!uuid) {
-        uuid = 'DEV-' + crypto.randomUUID();
+        try {
+          uuid = 'DEV-' + (
+            window.crypto && typeof window.crypto.randomUUID === 'function'
+              ? window.crypto.randomUUID()
+              : createFallbackUUID()
+          );
+        } catch (error) {
+          uuid = createFallbackUUID();
+        }
         localStorage.setItem('device_uuid', uuid);
       }
       return uuid;
@@ -544,22 +601,69 @@
     function refreshSavedAuthActions() {
       const continueBtn = document.getElementById('continue-btn');
       const clearBtn = document.getElementById('clear-btn');
-      const hasSaved = !!(localStorage.getItem('auth_phone') && localStorage.getItem('auth_password'));
+      const hasSaved = !!(localStorage.getItem(AUTH_PHONE_KEY) && localStorage.getItem(AUTH_PASSWORD_KEY));
       continueBtn.classList.toggle('hidden', !hasSaved);
       clearBtn.classList.toggle('hidden', !hasSaved);
     }
 
+    function clearSavedPassword() {
+      localStorage.removeItem(AUTH_PASSWORD_KEY);
+      localStorage.removeItem(AUTH_REMEMBER_PASSWORD_KEY);
+      localStorage.removeItem(AUTH_PASSWORD_EXPIRES_KEY);
+    }
+
+    function clearSavedPhone() {
+      localStorage.removeItem(AUTH_PHONE_KEY);
+      localStorage.removeItem(AUTH_REMEMBER_ACCOUNT_KEY);
+    }
+
+    function getSavedAuthState() {
+      const rememberAccount = localStorage.getItem(AUTH_REMEMBER_ACCOUNT_KEY) === '1';
+      const rememberPassword = localStorage.getItem(AUTH_REMEMBER_PASSWORD_KEY) === '1';
+      const passwordExpiry = Number(localStorage.getItem(AUTH_PASSWORD_EXPIRES_KEY) || 0);
+      if (rememberPassword && (!passwordExpiry || passwordExpiry <= Date.now())) {
+        clearSavedPassword();
+      }
+      return {
+        phone: localStorage.getItem(AUTH_PHONE_KEY) || '',
+        password: localStorage.getItem(AUTH_PASSWORD_KEY) || '',
+        rememberAccount: localStorage.getItem(AUTH_REMEMBER_ACCOUNT_KEY) === '1',
+        rememberPassword: localStorage.getItem(AUTH_REMEMBER_PASSWORD_KEY) === '1'
+      };
+    }
+
+    function persistAuthPreference({ phone = '', password = '', rememberAccount = false, rememberPassword = false }) {
+      if (rememberAccount && phone) {
+        localStorage.setItem(AUTH_PHONE_KEY, phone);
+        localStorage.setItem(AUTH_REMEMBER_ACCOUNT_KEY, '1');
+      } else {
+        clearSavedPhone();
+      }
+
+      if (rememberPassword && password) {
+        localStorage.setItem(AUTH_PASSWORD_KEY, password);
+        localStorage.setItem(AUTH_REMEMBER_PASSWORD_KEY, '1');
+        localStorage.setItem(AUTH_PASSWORD_EXPIRES_KEY, String(Date.now() + 30 * 24 * 60 * 60 * 1000));
+      } else {
+        clearSavedPassword();
+      }
+    }
+
     function clearSavedAuth() {
-      localStorage.removeItem('auth_phone');
-      localStorage.removeItem('auth_password');
+      clearSavedPhone();
+      clearSavedPassword();
       document.getElementById('phone-input').value = '';
       document.getElementById('password-input').value = '';
+      const rememberAccountEl = document.getElementById('remember-account');
+      const rememberPasswordEl = document.getElementById('remember-password');
+      if (rememberAccountEl) rememberAccountEl.checked = false;
+      if (rememberPasswordEl) rememberPasswordEl.checked = false;
       refreshSavedAuthActions();
       showError('');
     }
 
     function goChatDirect() {
-      window.location.href = '/chat';
+      window.location.href = currentAgentId ? `/chat?agent_id=${encodeURIComponent(currentAgentId)}` : '/chat';
     }
 
     function showModal({ title, body, showInput = false, inputType = 'text', placeholder = '', okOnly = false, okText = '确定', cancelText = '取消' }) {
@@ -626,7 +730,12 @@
             await showModal({ title: '修改失败', body: data.msg || '修改密码失败，请检查输入。', okOnly: true });
             continue;
           }
-          localStorage.setItem('auth_password', nextPassword.trim());
+          persistAuthPreference({
+            phone,
+            password: nextPassword.trim(),
+            rememberAccount: document.getElementById('remember-account')?.checked,
+            rememberPassword: document.getElementById('remember-password')?.checked
+          });
           await showModal({ title: '修改成功', body: '密码已经更新，即将进入系统。', okOnly: true });
           return true;
         } catch (error) {
@@ -636,9 +745,24 @@
       }
     }
 
+    async function parseJsonSafely(response) {
+      const raw = await response.text();
+      if (!raw) return {};
+      try {
+        return JSON.parse(raw);
+      } catch (error) {
+        return {
+          ok: false,
+          msg: response.ok ? '响应格式异常，请稍后重试' : `请求失败（HTTP ${response.status}）`
+        };
+      }
+    }
+
     async function doAuth() {
       const phone = document.getElementById('phone-input').value.trim();
       const password = document.getElementById('password-input').value.trim();
+      const rememberAccount = !!document.getElementById('remember-account')?.checked;
+      const rememberPassword = !!document.getElementById('remember-password')?.checked;
       const btn = document.getElementById('auth-btn');
       if (!phone) { showError('请输入手机号'); return; }
       if (!password) { showError('请输入密码'); return; }
@@ -651,9 +775,9 @@
         const res = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password, phone, uuid })
+          body: JSON.stringify({ password, phone })
         });
-        const data = await res.json();
+        const data = await parseJsonSafely(res);
         if (!data.ok) {
           showError(data.msg || '验证失败');
           btn.disabled = false;
@@ -661,8 +785,7 @@
           return;
         }
 
-        localStorage.setItem('auth_phone', phone);
-        localStorage.setItem('auth_password', password);
+        persistAuthPreference({ phone, password, rememberAccount, rememberPassword });
 
         if (data.must_change_password) {
           const ok = await forcePasswordChange(phone, password);
@@ -673,9 +796,9 @@
           }
         }
 
-        window.location.href = '/chat';
+        window.location.href = currentAgentId ? `/chat?agent_id=${encodeURIComponent(currentAgentId)}` : '/chat';
       } catch (error) {
-        showError('网络错误，请重试');
+        showError(error && error.message ? `网络错误：${error.message}` : '网络错误，请重试');
       }
 
       btn.disabled = false;
@@ -684,13 +807,30 @@
 
     (async function init() {
       await loadAppConfig();
-      const savedPhone = localStorage.getItem('auth_phone') || '';
-      const savedPassword = localStorage.getItem('auth_password') || '';
+      const saved = getSavedAuthState();
+      const savedPhone = saved.phone || '';
+      const savedPassword = saved.password || '';
       if (savedPhone) {
         document.getElementById('phone-input').value = savedPhone;
       }
       if (savedPassword) {
         document.getElementById('password-input').value = savedPassword;
+      }
+      const rememberAccountEl = document.getElementById('remember-account');
+      const rememberPasswordEl = document.getElementById('remember-password');
+      if (rememberAccountEl) rememberAccountEl.checked = !!saved.rememberAccount;
+      if (rememberPasswordEl) rememberPasswordEl.checked = !!saved.rememberPassword;
+      if (rememberPasswordEl && rememberAccountEl) {
+        rememberPasswordEl.addEventListener('change', () => {
+          if (rememberPasswordEl.checked) {
+            rememberAccountEl.checked = true;
+          }
+        });
+        rememberAccountEl.addEventListener('change', () => {
+          if (!rememberAccountEl.checked) {
+            rememberPasswordEl.checked = false;
+          }
+        });
       }
     })();
   </script>

@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "service_desk",
+  "app_name": "中国电信客户服务中心",
+  "app_subtitle": "工单受理、问题答复与升级协同平台",
+  "chat_title": "电信客服中枢",
+  "chat_tagline": "围绕套餐、宽带、账单和投诉场景，生成更稳的客服答复与升级建议。",
+  "welcome_message": "你好，我是电信客服中枢。你可以输入用户问题、账单场景、宽带故障或投诉诉求，我会给出答复建议。",
+  "agent_description": "面向客服工单与投诉协同场景的智能客服助手，负责标准答复、升级判断与服务记录整理。",
+  "logo": "https://www.google.com/s2/favicons?domain=189.cn&sz=128",
+  "recommended_questions": [
+    "用户宽带断网 6 小时，客服应该怎么答复？",
+    "套餐变更后为什么当月账单没有立刻生效？",
+    "投诉工单什么情况下需要升级给班长？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "电信客服后台登录 · 建议先确认用户类型、套餐规则和升级工单标准",
+  "input_placeholder": "输入套餐咨询、账单问题、宽带故障或投诉内容...",
+  "send_button_text": "生成客服答复",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "service_desk",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f4f8ff",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#d7e3f8",
+    "text": "#213c6b",
+    "muted": "#6f87ad",
+    "accent": "#2563eb",
+    "accent_strong": "#194ab7",
+    "accent_soft": "rgba(37, 99, 235, 0.12)",
+    "danger": "#d55f61",
+    "primary": "#2563eb",
+    "primary_deep": "#194ab7",
+    "primary_soft": "rgba(37, 99, 235, 0.12)"
+  }
+}

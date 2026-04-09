@@ -10,6 +10,7 @@ from backend.app_config import load_app_config
 from backend.cache import semantic_cache
 from backend.database import record_chat_log
 from backend.guardrails import apply_input_guardrails, apply_output_guardrails
+from backend.knowledge_assets import annotate_retrieval_results_with_scope
 from backend.llm_service import stream_chat_completion
 from backend.memory import build_short_term_memory
 from backend.model_config import load_model_config
@@ -40,6 +41,7 @@ class ChatWorkflowState(TypedDict, total=False):
     cache_key: str
     phone: str
     tenant_id: str
+    agent_id: str
     session_id: str
     request_id: str
     # 运行时依赖必须显式进入 LangGraph 状态，否则租户链路会退回平台默认配置。
@@ -77,6 +79,9 @@ class ChatWorkflowState(TypedDict, total=False):
     retrieval_strategy_trace: list[dict[str, Any]]
     tool_result: dict[str, Any]
     tool_used: str
+    knowledge_scope: dict[str, Any]
+    allowed_tools: list[str]
+    mcp_servers: list[str]
     skip_cache_lookup: bool
     skip_cache_write: bool
     phase_timings: dict[str, Any]
@@ -182,6 +187,8 @@ def _tool_node(state: ChatWorkflowState) -> ChatWorkflowState:
         state.get("original_question") or state.get("question", ""),
         tenant_id=state.get("tenant_id"),
         tenant_name=tenant_name,
+        allowed_tools=state.get("allowed_tools") or [],
+        allowed_mcp_servers=state.get("mcp_servers") or [],
     )
     if result.get("matched") and result.get("ok"):
         answer_text = str(result.get("message") or "").strip()
@@ -216,8 +223,13 @@ def _retrieve_node(state: ChatWorkflowState) -> ChatWorkflowState:
         preferred_backend=rag_runtime.get_stats().get("retrieval_backend", "hybrid"),
     )
     top_k = 5
+    scoped_top_k = max(top_k, 12) if state.get("knowledge_scope") else top_k
     backend = str(route.get("backend") or "hybrid")
-    rag_results = rag_runtime.search(question, top_k=top_k, backend_override=backend)
+    rag_results = annotate_retrieval_results_with_scope(
+        tenant_id=state.get("tenant_id", "default"),
+        results=rag_runtime.search(question, top_k=scoped_top_k, backend_override=backend),
+        knowledge_scope=state.get("knowledge_scope") or {},
+    )[:top_k]
     judge = judge_retrieval_quality(rag_results, retrieval_config)
     attempts = 1
     strategy_trace = [
@@ -250,7 +262,12 @@ def _retrieve_node(state: ChatWorkflowState) -> ChatWorkflowState:
             stage_query = str(rewritten.get("rewritten") or question).strip() or question
             stage_backend = str(stage.get("backend") or backend)
             stage_top_k = int(stage.get("top_k") or retry_plan.get("fallback_top_k", top_k) or top_k)
-            rag_results = rag_runtime.search(stage_query, top_k=stage_top_k, backend_override=stage_backend)
+            stage_requested_top_k = max(stage_top_k, 12) if state.get("knowledge_scope") else stage_top_k
+            rag_results = annotate_retrieval_results_with_scope(
+                tenant_id=state.get("tenant_id", "default"),
+                results=rag_runtime.search(stage_query, top_k=stage_requested_top_k, backend_override=stage_backend),
+                knowledge_scope=state.get("knowledge_scope") or {},
+            )[:stage_top_k]
             judge = judge_retrieval_quality(rag_results, retrieval_config)
             attempts += 1
             strategy_trace.append(
@@ -299,6 +316,7 @@ def _memory_node(state: ChatWorkflowState) -> ChatWorkflowState:
     memory_context = build_short_term_memory(
         phone=state.get("phone", ""),
         tenant_id=state.get("tenant_id", "default"),
+        agent_id=state.get("agent_id", ""),
         session_id=state.get("session_id", ""),
         app_settings=app_settings,
     )
@@ -375,16 +393,34 @@ def _prompt_build_node(state: ChatWorkflowState) -> ChatWorkflowState:
 
 def _model_route_node(state: ChatWorkflowState) -> ChatWorkflowState:
     model_settings = state.get("model_settings") or load_model_config()
-    primary_model = str(model_settings.get("model_primary") or "").strip()
-    fallback_model = str(model_settings.get("model_fallback") or "").strip()
-    route = [item for item in [primary_model, fallback_model] if item]
-    deduped_route: list[str] = []
-    for item in route:
-        if item not in deduped_route:
-            deduped_route.append(item)
+    providers = model_settings.get("providers") if isinstance(model_settings, dict) else None
+    provider_routes: list[dict] = []
+    if isinstance(providers, list):
+        for index, item in enumerate(providers):
+            if not isinstance(item, dict):
+                continue
+            primary_model = str(item.get("model_primary") or item.get("model") or "").strip()
+            fallback_model = str(item.get("model_fallback") or "").strip()
+            route = [value for value in [primary_model, fallback_model] if value]
+            deduped_route: list[str] = []
+            for value in route:
+                if value not in deduped_route:
+                    deduped_route.append(value)
+            provider_routes.append(
+                {
+                    "provider_id": str(item.get("id") or f"provider_{index + 1}"),
+                    "provider_label": str(item.get("label") or item.get("name") or f"供应商 {index + 1}"),
+                    "base_url": str(item.get("base_url") or "").strip(),
+                    "api_keys": list(item.get("api_keys") or []),
+                    "model_route": deduped_route,
+                }
+            )
+
+    first_route = provider_routes[0]["model_route"] if provider_routes else []
     return {
         **state,
-        "model_route": deduped_route,
+        "model_route": first_route,
+        "provider_routes": provider_routes,
         "base_url": str(model_settings.get("base_url") or ""),
     }
 
@@ -407,6 +443,7 @@ async def _generate_answer_node(state: ChatWorkflowState) -> ChatWorkflowState:
         system_prompt=state.get("system_prompt", ""),
         model_settings=state.get("model_settings") or load_model_config(),
         workflow_route=state.get("model_route") or [],
+        provider_routes=state.get("provider_routes") or [],
         default_base_url=str(llm_context.get("default_base_url") or ""),
         ssl_ctx=llm_context.get("ssl_ctx"),
         on_model_selected=lambda model: llm_runtime.__setitem__("selected_model", model),
@@ -461,6 +498,7 @@ def build_knowledge_hits(rag_results: list[dict] | None) -> list[dict]:
             "title": item.get("title", ""),
             "tier": item.get("tier", ""),
             "tier_label": item.get("tier_label", ""),
+            "tags": item.get("tags") or [],
             "score": item.get("score", 0),
             "rerank_score": item.get("rerank_score"),
             "final_score": item.get("final_score"),
@@ -508,6 +546,7 @@ def build_retrieval_trace(
         "matched_entities": list(state.get("matched_entities") or []),
         "query_intent": str(state.get("query_intent") or ""),
         "answer_strategy": str(state.get("answer_strategy") or ""),
+        "knowledge_scope": dict(state.get("knowledge_scope") or {}),
         "retrieval_route": _trace_route_label(retrieval_route),
         "retrieval_route_raw": retrieval_route,
         "retrieval_strategy": (
@@ -559,6 +598,7 @@ def _finalize_answer_node(state: ChatWorkflowState) -> ChatWorkflowState:
                 knowledge_hits=knowledge_hits,
                 retrieval_trace=retrieval_trace,
                 tenant_id=state.get("tenant_id", "default"),
+                agent_id=state.get("agent_id", ""),
                 request_id=state.get("request_id", ""),
                 session_id=state.get("session_id", ""),
             )
@@ -651,6 +691,7 @@ async def run_chat_workflow(
     phone: str,
     cache_key: str | None = None,
     tenant_id: str = "default",
+    agent_id: str = "",
     session_id: str = "",
     request_id: str = "",
     llm_context: dict | None = None,
@@ -661,6 +702,7 @@ async def run_chat_workflow(
         phone=phone,
         cache_key=cache_key,
         tenant_id=tenant_id,
+        agent_id=agent_id,
         session_id=session_id,
         request_id=request_id,
         llm_context=llm_context,
@@ -673,6 +715,7 @@ async def run_chat_workflow_with_runtime(
     phone: str,
     cache_key: str | None = None,
     tenant_id: str = "default",
+    agent_id: str = "",
     session_id: str = "",
     request_id: str = "",
     rag_runtime=None,
@@ -683,6 +726,9 @@ async def run_chat_workflow_with_runtime(
     log_chat: bool = True,
     skip_cache_lookup: bool = False,
     skip_cache_write: bool = False,
+    knowledge_scope: dict | None = None,
+    allowed_tools: list[str] | None = None,
+    mcp_servers: list[str] | None = None,
 ) -> dict[str, Any]:
     """运行聊天主链路，并允许外部注入租户级运行时依赖。"""
     initial_state: ChatWorkflowState = {
@@ -690,6 +736,7 @@ async def run_chat_workflow_with_runtime(
         "cache_key": cache_key or question,
         "phone": phone,
         "tenant_id": tenant_id,
+        "agent_id": agent_id,
         "session_id": session_id,
         "request_id": request_id,
         "cache_hit": False,
@@ -715,6 +762,9 @@ async def run_chat_workflow_with_runtime(
         "model_loader": model_loader,
         "prompt_loader": prompt_loader,
         "llm_context": llm_context or {},
+        "knowledge_scope": knowledge_scope or {},
+        "allowed_tools": allowed_tools or [],
+        "mcp_servers": mcp_servers or [],
         "log_chat": log_chat,
         "skip_cache_lookup": skip_cache_lookup,
         "skip_cache_write": skip_cache_write,

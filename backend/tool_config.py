@@ -31,6 +31,11 @@ DEFAULT_TOOL_CONFIG = {
         "use_ssl": True,
         "allow_domains": [],
     },
+    "mcp": {
+        "enabled": False,
+        "request_timeout_seconds": 30,
+        "servers": [],
+    },
 }
 
 
@@ -86,3 +91,33 @@ def save_tool_config(config_data: dict, tenant_id: str | None = None, tenant_nam
         encoding="utf-8",
     )
     return merged
+
+
+def list_enabled_mcp_servers(tool_config: dict | None = None) -> list[dict]:
+    """返回启用的 MCP 服务列表。"""
+    config = tool_config if isinstance(tool_config, dict) else DEFAULT_TOOL_CONFIG
+    mcp_cfg = config.get("mcp") if isinstance(config.get("mcp"), dict) else {}
+    enabled = bool(mcp_cfg.get("enabled"))
+    servers = mcp_cfg.get("servers") if isinstance(mcp_cfg.get("servers"), list) else []
+    if not enabled:
+        return []
+    result: list[dict] = []
+    for item in servers:
+        if not isinstance(item, dict):
+            continue
+        if item.get("enabled") is False:
+            continue
+        server_id = str(item.get("server_id") or item.get("id") or "").strip()
+        if not server_id:
+            continue
+        result.append(
+            {
+                "server_id": server_id,
+                "label": str(item.get("label") or server_id).strip(),
+                "bridge_url": str(item.get("bridge_url") or "").strip(),
+                "auth_token": str(item.get("auth_token") or "").strip(),
+                "enabled": True,
+                "headers": item.get("headers") if isinstance(item.get("headers"), dict) else {},
+            }
+        )
+    return result

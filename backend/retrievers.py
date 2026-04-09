@@ -16,12 +16,15 @@ from backend.retrieval_config import load_retrieval_config, resolve_qdrant_local
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
+    from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
     QDRANT_CLIENT_AVAILABLE = True
 except Exception:  # pragma: no cover - 允许未安装时回退
     QdrantClient = None
     Distance = None
+    FieldCondition = None
+    Filter = None
+    MatchValue = None
     PointStruct = None
     VectorParams = None
     QDRANT_CLIENT_AVAILABLE = False
@@ -283,11 +286,17 @@ class QdrantRetriever:
     后面再平滑替换成真实 Embedding 服务。
     """
 
-    def __init__(self, config_data: dict | None = None, knowledge_tiers: dict | None = None):
+    def __init__(
+        self,
+        config_data: dict | None = None,
+        knowledge_tiers: dict | None = None,
+        tenant_namespace: str | None = None,
+    ):
         self._client = None
         self._last_error = ""
         self._config_data = config_data
         self._knowledge_tiers = knowledge_tiers
+        self._tenant_namespace = str(tenant_namespace or "").strip()
         self._connect()
 
     def _cfg(self) -> dict:
@@ -389,6 +398,7 @@ class QdrantRetriever:
                         "source": chunk_sources[idx],
                         "tier": chunk_tiers[idx],
                         "source_weight": float(chunk_source_weights[idx]),
+                        "tenant_namespace": self._tenant_namespace,
                     },
                 )
             )
@@ -407,11 +417,22 @@ class QdrantRetriever:
         collection = str(cfg.get("collection") or "").strip()
         try:
             embedder = get_embedding_backend(self._cfg())
+            query_filter = None
+            if self._tenant_namespace and Filter and FieldCondition and MatchValue:
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="tenant_namespace",
+                            match=MatchValue(value=self._tenant_namespace),
+                        )
+                    ]
+                )
             hits = self._client.search(
                 collection_name=collection,
                 query_vector=embedder.embed(query),
                 limit=top_k,
                 with_payload=True,
+                query_filter=query_filter,
             )
         except Exception as exc:
             self._last_error = str(exc)

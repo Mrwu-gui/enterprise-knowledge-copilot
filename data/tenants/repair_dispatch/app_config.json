@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "repair_dispatch",
+  "app_name": "海尔售后调度中心",
+  "app_subtitle": "工单分派、上门标准与备件协同平台",
+  "chat_title": "海尔派工助手",
+  "chat_tagline": "围绕设备故障、上门时效和备件情况，生成更稳的派工与客户沟通方案。",
+  "welcome_message": "你好，我是海尔派工助手。你可以让我判断故障级别、安排工程师、查询上门标准或生成客户通知话术。",
+  "agent_description": "面向家电售后与工单调度场景的智能派工助手，负责故障分级、工程师匹配与客户通知建议。",
+  "logo": "https://www.google.com/s2/favicons?domain=haier.com&sz=128",
+  "recommended_questions": [
+    "冰箱不制冷且客户要求今天上门，应该怎么派工？",
+    "洗衣机漏水但备件缺货，客服怎么回复更合适？",
+    "高等级工单的升级处理流程是什么？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "海尔售后后台登录 · 建议先确认故障等级、上门 SLA 和备件状态",
+  "input_placeholder": "输入故障现象、城市、备件情况或需要通知客户的内容...",
+  "send_button_text": "生成派工方案",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "repair_dispatch",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f5fbff",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#d8e9f2",
+    "text": "#214357",
+    "muted": "#6a8797",
+    "accent": "#0076c8",
+    "accent_strong": "#005a99",
+    "accent_soft": "rgba(0, 118, 200, 0.12)",
+    "danger": "#d95e57",
+    "primary": "#0076c8",
+    "primary_deep": "#005a99",
+    "primary_soft": "rgba(0, 118, 200, 0.12)"
+  }
+}

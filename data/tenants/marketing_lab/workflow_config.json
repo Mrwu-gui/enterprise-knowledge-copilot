@@ -1,0 +1,140 @@
+{
+  "default_workflow_id": "yili_brand_router",
+  "items": [
+    {
+      "workflow_id": "yili_brand_router",
+      "name": "伊利品牌内容分流",
+      "description": "先检索品牌规范与活动知识，再分流到品牌内容建议或通用创意兜底。",
+      "enabled": true,
+      "sort_order": 100,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-07 21:36:27",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户问题",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "品牌知识检索",
+            "description": "从伊利品牌规范、活动口径与渠道素材规则中检索相关内容",
+            "query": "{{input.text}}",
+            "knowledgeBase": "默认知识库",
+            "topK": 5,
+            "threshold": 0.16
+          }
+        },
+        {
+          "id": "condition_1",
+          "type": "condition",
+          "x": 660,
+          "y": 180,
+          "data": {
+            "label": "判断是否命中品牌知识",
+            "description": "命中则输出品牌建议，否则输出创意兜底答复",
+            "condition": "len(last.hits) > 0"
+          }
+        },
+        {
+          "id": "ai_hit",
+          "type": "ai",
+          "x": 980,
+          "y": 80,
+          "data": {
+            "label": "生成品牌建议",
+            "description": "结合品牌规则生成内容方向与语气建议",
+            "prompt": "你是伊利品牌增长实验室的品牌内容助手。请基于用户问题和品牌知识片段，输出品牌合规、可执行的内容建议。用户问题：{{input.text}}\n\n知识片段：{{last.knowledge_text}}\n\n要求：1. 先给建议方向；2. 如果涉及平台内容，请列出 2-4 个要点；3. 如果涉及禁用词或品牌规范，必须明确提醒；4. 只输出最终答复。",
+            "model": "__default__",
+            "temperature": 0.3
+          }
+        },
+        {
+          "id": "ai_fallback",
+          "type": "ai",
+          "x": 980,
+          "y": 300,
+          "data": {
+            "label": "生成创意兜底",
+            "description": "知识不足时给出通用创意建议",
+            "prompt": "你是伊利品牌增长实验室的品牌内容助手。当前知识库未明确命中。请输出谨慎的通用内容建议。用户问题：{{input.text}}\n\n要求：1. 说明当前未检索到伊利内部明确规范；2. 可以给一般品牌内容建议；3. 不要虚构品牌官方口径。",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1290,
+          "y": 190,
+          "data": {
+            "label": "结束节点",
+            "description": "返回答复结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "condition_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "condition_1",
+          "to": "ai_hit",
+          "label": "true"
+        },
+        {
+          "id": "c4",
+          "from": "condition_1",
+          "to": "ai_fallback",
+          "label": "false"
+        },
+        {
+          "id": "c5",
+          "from": "ai_hit",
+          "to": "end_1",
+          "label": ""
+        },
+        {
+          "id": "c6",
+          "from": "ai_fallback",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "",
+        "chat_tagline": "",
+        "welcome_message": "",
+        "agent_description": "",
+        "recommended_questions": [],
+        "input_placeholder": "",
+        "send_button_text": ""
+      },
+      "system_prompt": "你是企业知识库的租户专属智能助理。\n\n请优先根据下方知识库内容回答；如果知识库没有明确答案，先说明知识不足，再给出谨慎建议。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    }
+  ],
+  "updated_at": 1775568987
+}

@@ -24,10 +24,16 @@ class RAGEngine:
         knowledge_dir: str | None = None,
         app_config: dict | None = None,
         retrieval_config: dict | None = None,
+        knowledge_namespace: str | None = None,
     ):
         self._knowledge_dir = knowledge_dir
         self._app_config = app_config
         self._retrieval_config = retrieval_config
+        self._knowledge_namespace = str(
+            knowledge_namespace
+            or (app_config or {}).get("knowledge_namespace")
+            or ""
+        ).strip()
         self.chunks: list[str] = []
         self.chunk_sources: list[str] = []
         self.chunk_tiers: list[str] = []
@@ -38,6 +44,7 @@ class RAGEngine:
         self._qdrant_retriever = QdrantRetriever(
             config_data=self._retrieval_cfg(),
             knowledge_tiers=self._tier_cfg(),
+            tenant_namespace=self._knowledge_namespace,
         )
         self._hybrid_retriever = HybridRetriever(
             dense_retriever=self._qdrant_retriever,
@@ -354,6 +361,7 @@ def build_runtime_rag_engine(
         knowledge_dir=knowledge_dir,
         app_config=app_config,
         retrieval_config=retrieval_config,
+        knowledge_namespace=str(app_config.get("knowledge_namespace") or ""),
     )
     engine.build_index()
     return engine

@@ -1038,8 +1038,8 @@
 
                 <div class="bg-white p-5 rounded-xl border border-line">
                   <div class="mb-3">
-                    <h4 class="font-semibold text-textMain">检索评测</h4>
-                    <p class="text-xs text-textMuted">输入标准问题集，验证当前检索链的命中情况与平均分。</p>
+                    <h4 class="font-semibold text-textMain">RAG 评测</h4>
+                    <p class="text-xs text-textMuted">既看召回 hit@k，也复用真实问答链路评估 Faithfulness / Relevancy。</p>
                   </div>
                   <div class="space-y-3">
                     <label class="block">
@@ -1051,8 +1051,8 @@
                       <span class="block text-sm font-semibold mb-2">评测题集 JSON</span>
                       <textarea id="evaluation-cases"
                         class="w-full text-sm px-4 py-2.5 rounded-lg border border-line bg-panelSoft focus:border-primary focus:ring-primary/20 min-h-[140px]">[
-  {"question":"报销流程怎么走","expected_keywords":["报销","审批"],"expected_tier":"permanent"},
-  {"question":"今天有没有临时通知","expected_keywords":["公告","通知"],"expected_tier":"hotfix"}
+  {"question":"报销流程怎么走","expected_keywords":["报销","审批"],"expected_tier":"permanent","reference_answer":"先提交报销单并走审批流程。"},
+  {"question":"今天有没有临时通知","expected_keywords":["公告","通知"],"expected_tier":"hotfix","reference_answer":"如知识库没有临时通知，应明确说明未命中相关内容。"}
 ]</textarea>
                     </label>
                     <div class="flex gap-3">
@@ -1068,7 +1068,7 @@
               <div class="bg-white p-5 rounded-xl border border-line">
                 <div class="mb-3">
                   <h4 class="font-semibold text-textMain">评测历史</h4>
-                  <p class="text-xs text-textMuted">对比不同时点、不同配置下的命中率和平均分表现。</p>
+                  <p class="text-xs text-textMuted">对比不同时点、不同配置下的召回效果和答案质量表现。</p>
                 </div>
                 <div id="evaluation-log-list" class="divide-y divide-line/70"></div>
               </div>
@@ -1522,6 +1522,12 @@
         return;
       }
       root.innerHTML = logs.map((item) => `
+        ${(() => {
+          const quality = item.config_snapshot?.quality_summary || {};
+          const faithfulness = item.avg_faithfulness ?? quality.avg_faithfulness;
+          const answerRelevance = item.avg_answer_relevance ?? quality.avg_answer_relevance;
+          const proxy = item.avg_answer_relevance_proxy ?? 0;
+          return `
         <div class="log-item">
           <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
             <div class="font-semibold">${escapeHtml(item.name || "未命名评测")}</div>
@@ -1534,9 +1540,20 @@
             平均分：<b>${escapeHtml(item.avg_top_score || 0)}</b>
           </div>
           <div class="text-sm text-textMuted leading-7 mt-2">
+            Faithfulness：<b>${escapeHtml(faithfulness ?? "-")}</b> ·
+            Relevancy：<b>${escapeHtml(answerRelevance ?? "-")}</b> ·
+            代理相关性：<b>${escapeHtml(proxy)}</b>
+          </div>
+          <div class="text-sm text-textMuted leading-7 mt-2">
+            评测引擎：<b>${escapeHtml(quality.provider || "builtin")}</b> ·
+            状态：<b>${escapeHtml(quality.status || "-")}</b> ·
+            原因：<b>${escapeHtml(quality.reason || "-")}</b>
+          </div>
+          <div class="text-sm text-textMuted leading-7 mt-2">
             最近题目：<b>${escapeHtml(((item.detail || []).slice(0, 2).map((row) => row.question || "-")).join(" / ") || "-")}</b>
           </div>
         </div>
+      `;})()}
       `).join("");
     }
 
@@ -1585,7 +1602,7 @@
           throw new Error(data.msg || "评测启动失败");
         }
         const result = data.result || {};
-        adminShowToast(`✅ 评测完成！hit@1=${result.hit_at_1 || 0}`, 'success');
+        adminShowToast(`✅ 评测完成！hit@1=${result.hit_at_1 || 0} · faithfulness=${result.avg_faithfulness ?? '-'}`, 'success');
         await loadObservabilityPanel();
       } catch (error) {
         adminShowToast(`❌ 评测失败: ${error.message}`, 'error');

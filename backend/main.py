@@ -58,6 +58,8 @@ from backend.database import (
     list_tenants, create_tenant, update_tenant, verify_tenant_admin,
     list_tenant_phone_accounts, save_tenant_phone_account, toggle_tenant_phone_account,
     create_chat_session, list_chat_sessions, list_chat_session_messages, cleanup_empty_chat_sessions,
+    list_agents, get_agent, save_agent, toggle_agent, delete_agent,
+    list_user_agent_bindings, save_user_agent_bindings, get_default_agent,
 )
 from backend.model_config import ensure_model_config_files, load_model_config, save_model_config
 from backend.crawler_config import ensure_crawler_config_file, load_crawler_sources, save_crawler_sources
@@ -86,10 +88,26 @@ from backend.retrieval_config import (
 from backend.tool_config import (
     TOOL_CONFIG_PATH,
     ensure_tool_config_file,
+    list_enabled_mcp_servers,
     load_tool_config,
     save_tool_config,
 )
+from backend.workflow_config import ensure_workflow_config_file, load_workflow_config, save_workflow_config
+from backend.workflow_runtime import WorkflowRuntimeError, execute_tenant_workflow
 from backend.security_config import ensure_security_config_file, load_security_config
+from backend.knowledge_assets import (
+    delete_knowledge_file_meta,
+    get_knowledge_file_meta,
+    list_knowledge_categories,
+    list_knowledge_libraries,
+    list_knowledge_tags,
+    list_knowledge_tag_groups,
+    save_knowledge_structure,
+    save_knowledge_tag_catalog,
+    save_knowledge_tag_groups,
+    set_knowledge_file_meta,
+    set_knowledge_file_tags,
+)
 from backend.tenant_config import (
     ensure_tenant_storage,
     get_tenant_paths,
@@ -99,7 +117,7 @@ from backend.tenant_config import (
     save_tenant_app_config,
     save_tenant_system_prompt,
 )
-from backend.generic_crawler import run_generic_crawler
+from backend.generic_crawler import GenericCrawlerError, run_generic_crawler
 from backend.scheduler import crawler_scheduler
 from backend.langchain_components import langchain_runtime_status
 from backend.document_processing import (
@@ -107,6 +125,7 @@ from backend.document_processing import (
     UnsupportedDocumentError,
     normalize_tier,
     parse_uploaded_knowledge_file,
+    split_documents_for_stats,
 )
 from backend.retrieval_evaluation import run_retrieval_evaluation
 
@@ -128,6 +147,10 @@ def _public_tier_code(value: str) -> str:
 def user_facing_llm_error() -> str:
     """Return a safe, friendly message for frontend users."""
     return "服务暂时繁忙，我正在自动切换备用线路。请稍等几秒后再试。"
+
+
+def _now_text() -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S")
 
 # --- Rate Limiter (1 req / 10s per user key) ---
 rate_limit_store: dict[str, list[float]] = defaultdict(list)
@@ -181,6 +204,7 @@ async def lifespan(app: FastAPI):
     ensure_crawler_config_file()
     ensure_retrieval_config_file()
     ensure_tool_config_file()
+    ensure_workflow_config_file()
     ensure_security_config_file()
     ensure_system_prompt_file()
     runtime_status = langchain_runtime_status()
@@ -219,19 +243,23 @@ async def add_no_cache_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-    record_request_log(
-        request_id=request_id,
-        path=request.url.path,
-        method=request.method,
-        status_code=response.status_code,
-        duration_ms=duration_ms,
-        client_ip=(request.client.host if request.client else ""),
-        phone=getattr(request.state, "ob_user_phone", "") or "",
-        cache_status=getattr(request.state, "ob_cache_status", "") or "",
-        model_name=getattr(request.state, "ob_model_name", "") or "",
-        error_message=getattr(request.state, "ob_error_message", "") or "",
-        tenant_id=getattr(request.state, "ob_tenant_id", "default") or "default",
-    )
+    try:
+        record_request_log(
+            request_id=request_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+            client_ip=(request.client.host if request.client else ""),
+            phone=getattr(request.state, "ob_user_phone", "") or "",
+            cache_status=getattr(request.state, "ob_cache_status", "") or "",
+            model_name=getattr(request.state, "ob_model_name", "") or "",
+            error_message=getattr(request.state, "ob_error_message", "") or "",
+            tenant_id=getattr(request.state, "ob_tenant_id", "default") or "default",
+        )
+    except Exception as exc:
+        # Observability logging should never break page rendering or API responses.
+        print(f"[WARN] record_request_log failed: {exc}")
     return response
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
@@ -269,8 +297,8 @@ def _tenant_runtime_bundle(tenant: dict) -> dict:
     qdrant_cfg = retrieval_settings.setdefault("qdrant", {})
     # 租户运行时始终绑定自己的 collection，避免误用平台默认向量集合。
     qdrant_cfg["collection"] = f"tenant_{tenant_id}_knowledge"
-    prompt_path = get_tenant_paths(tenant_id)["prompt"]
     knowledge_dir = get_tenant_knowledge_dir(tenant_id)
+    prompt_path = get_tenant_paths(tenant_id)["prompt"]
     rag_runtime = build_runtime_rag_engine(
         knowledge_dir=knowledge_dir,
         app_config=app_settings,
@@ -285,6 +313,77 @@ def _tenant_runtime_bundle(tenant: dict) -> dict:
         "retrieval_settings": retrieval_settings,
         "prompt_template": load_system_prompt_template_from_path(prompt_path),
         "rag_runtime": rag_runtime,
+    }
+
+
+def _normalize_public_questions(value) -> list[str]:
+    items = value if isinstance(value, list) else []
+    result: list[str] = []
+    for item in items:
+        clean = str(item or "").strip()
+        if clean:
+            result.append(clean)
+    return result[:8]
+
+
+def _apply_agent_overrides(app_settings: dict, agent: dict | None) -> dict:
+    if not agent:
+        return app_settings
+    settings = json.loads(json.dumps(app_settings))
+    if agent.get("name"):
+        settings["title"] = agent["name"]
+    if agent.get("description"):
+        settings["subtitle"] = agent["description"]
+    if agent.get("welcome_message"):
+        settings["welcome_message"] = agent["welcome_message"]
+    if agent.get("input_placeholder"):
+        settings["input_placeholder"] = agent["input_placeholder"]
+    questions = _normalize_public_questions(agent.get("recommended_questions"))
+    if questions:
+        settings["recommended_questions"] = questions
+    if agent.get("avatar"):
+        settings["logo_url"] = agent["avatar"]
+    return settings
+
+
+def _resolve_agent_for_account(account: dict, requested_agent_id: str = "") -> dict | None:
+    tenant_id = str(account.get("tenant_id") or "default").strip() or "default"
+    if tenant_id == "default":
+        return None
+    clean_requested = str(requested_agent_id or "").strip()
+    bound_ids = list_user_agent_bindings(tenant_id=tenant_id, phone=str(account.get("phone") or "").strip())
+    if clean_requested:
+        if bound_ids and clean_requested not in bound_ids:
+            raise HTTPException(status_code=403, detail="当前账号无权访问该智能体")
+        agent = get_agent(tenant_id, clean_requested)
+        if not agent or not agent.get("enabled", True):
+            raise HTTPException(status_code=404, detail="智能体不存在或已停用")
+        return agent
+    if bound_ids:
+        for agent_id in bound_ids:
+            agent = get_agent(tenant_id, agent_id)
+            if agent and agent.get("enabled", True):
+                return agent
+        raise HTTPException(status_code=403, detail="当前账号未绑定可用智能体")
+    return get_default_agent(tenant_id)
+
+
+def _agent_public_payload(agent: dict | None) -> dict | None:
+    if not agent:
+        return None
+    return {
+        "agent_id": agent.get("agent_id", ""),
+        "name": agent.get("name", ""),
+        "description": agent.get("description", ""),
+        "avatar": agent.get("avatar", ""),
+        "status": agent.get("status", "draft"),
+        "enabled": bool(agent.get("enabled", True)),
+        "is_default": bool(agent.get("is_default", False)),
+        "workflow_id": agent.get("workflow_id", ""),
+        "knowledge_scope": agent.get("knowledge_scope") or {},
+        "tool_scope": agent.get("tool_scope") or [],
+        "mcp_servers": agent.get("mcp_servers") or [],
+        "recommended_questions": _normalize_public_questions(agent.get("recommended_questions")),
     }
 
 
@@ -351,10 +450,9 @@ async def auth_endpoint(request: Request):
     body = await request.json()
     phone = body.get("phone", "").strip()
     password = body.get("password", "").strip()
-    uuid = body.get("uuid", "").strip()
-    if not password or not uuid or not phone:
-        return JSONResponse({"ok": False, "msg": "缺少手机号、密码或设备ID"}, status_code=400)
-    result = verify_phone_login(phone, password, uuid)
+    if not password or not phone:
+        return JSONResponse({"ok": False, "msg": "缺少手机号或密码"}, status_code=400)
+    result = verify_phone_login(phone, password)
     if not result["ok"]:
         return JSONResponse(result, status_code=result.get("code", 400))
     return JSONResponse(result)
@@ -393,6 +491,7 @@ async def public_app_config():
 @app.get("/api/public/tenant-app-config")
 async def public_tenant_app_config(request: Request):
     phone = request.query_params.get("phone", "").strip()
+    agent_id = request.query_params.get("agent_id", "").strip()
     if not phone:
         return {"ok": True, "config": get_public_app_config()}
     account = get_phone_info(phone)
@@ -403,12 +502,14 @@ async def public_tenant_app_config(request: Request):
         return {"ok": True, "config": get_public_app_config()}
     tenant_name = str(account.get("tenant_name") or account.get("display_name") or tenant_id).strip() or tenant_id
     cfg = load_tenant_app_config(tenant_id, tenant_name)
-    return {"ok": True, "config": build_public_app_config(cfg)}
+    agent = _resolve_agent_for_account(account, agent_id)
+    cfg = _apply_agent_overrides(cfg, agent)
+    return {"ok": True, "config": build_public_app_config(cfg), "agent": _agent_public_payload(agent)}
 
 
-def _verify_front_chat_user(phone: str, password: str, uuid_value: str) -> tuple[dict, dict]:
+def _verify_front_chat_user(phone: str, password: str, uuid_value: str = "", requested_agent_id: str = "") -> tuple[dict, dict, dict | None]:
     """校验前台用户并返回账号信息，供聊天会话接口复用。"""
-    auth_result = verify_phone_login(phone, password, uuid_value)
+    auth_result = verify_phone_login(phone, password)
     if not auth_result["ok"]:
         raise HTTPException(status_code=auth_result.get("code", 403), detail=auth_result.get("msg", "未授权"))
     if auth_result.get("must_change_password"):
@@ -416,11 +517,13 @@ def _verify_front_chat_user(phone: str, password: str, uuid_value: str) -> tuple
     account = get_phone_info(phone) or {}
     tenant_id = str(account.get("tenant_id") or "default").strip() or "default"
     tenant_name = str(account.get("tenant_name") or account.get("display_name") or tenant_id).strip() or tenant_id
-    return auth_result, {
+    account_payload = {
         **account,
         "tenant_id": tenant_id,
         "tenant_name": tenant_name,
     }
+    agent = _resolve_agent_for_account(account_payload, requested_agent_id)
+    return auth_result, account_payload, agent
 
 
 def _build_cached_stream(
@@ -429,6 +532,7 @@ def _build_cached_stream(
     phone: str,
     cached_text: str,
     tenant_id: str,
+    agent_id: str = "",
     session_id: str = "",
     knowledge_hits: list[dict] | None = None,
     retrieval_trace: dict | None = None,
@@ -466,6 +570,7 @@ def _stream_chat_response(
     question: str,
     workflow_result: dict,
     tenant_id: str = "default",
+    agent_id: str = "",
     session_id: str = "",
 ):
     """把问答结果统一流式输出。
@@ -509,6 +614,7 @@ def _stream_chat_response(
                 knowledge_hits=cached_hits,
                 retrieval_trace=cached_trace,
                 tenant_id=tenant_id,
+                agent_id=agent_id,
                 request_id=request.state.request_id,
                 session_id=session_id,
             )
@@ -517,6 +623,7 @@ def _stream_chat_response(
             phone=phone,
             cached_text=cached,
             tenant_id=tenant_id,
+            agent_id=agent_id,
             session_id=session_id,
             knowledge_hits=cached_hits,
             retrieval_trace=cached_trace,
@@ -570,16 +677,16 @@ async def chat_endpoint(request: Request):
     body = await request.json()
     phone = body.get("phone", "").strip()
     password = body.get("password", "").strip()
-    uuid = body.get("uuid", "").strip()
     question = body.get("question", "").strip()
     session_id = str(body.get("session_id", "") or "").strip()
+    agent_id = str(body.get("agent_id", "") or "").strip()
 
-    if not password or not uuid or not phone:
+    if not password or not phone:
         return JSONResponse({"ok": False, "msg": "未授权"}, status_code=401)
 
     # Verify auth
     try:
-        auth_result, account = _verify_front_chat_user(phone, password, uuid)
+        auth_result, account, agent = _verify_front_chat_user(phone, password, requested_agent_id=agent_id)
     except HTTPException as exc:
         request.state.ob_error_message = str(exc.detail)
         return JSONResponse({"ok": False, "msg": str(exc.detail)}, status_code=exc.status_code)
@@ -587,6 +694,7 @@ async def chat_endpoint(request: Request):
     tenant_id = str(account.get("tenant_id") or "default").strip() or "default"
     tenant_name = str(account.get("tenant_name") or account.get("display_name") or tenant_id).strip() or tenant_id
     request.state.ob_tenant_id = tenant_id
+    active_agent_id = str((agent or {}).get("agent_id") or "").strip()
 
     # Rate limit
     if not check_rate_limit(phone):
@@ -598,7 +706,12 @@ async def chat_endpoint(request: Request):
         return JSONResponse({"ok": False, "msg": "请输入问题"}, status_code=400)
 
     if not session_id:
-        session = create_chat_session(phone=phone, tenant_id=tenant_id, title=question or "新对话")
+        session = create_chat_session(
+            phone=phone,
+            tenant_id=tenant_id,
+            agent_id=active_agent_id,
+            title=question or "新对话",
+        )
         session_id = str(session.get("session_id") or "").strip()
 
     llm_context = {
@@ -608,18 +721,24 @@ async def chat_endpoint(request: Request):
     }
     if tenant_id != "default":
         runtime = _tenant_runtime_bundle({"tenant_id": tenant_id, "tenant_name": tenant_name})
+        app_settings = _apply_agent_overrides(runtime["app_settings"], agent)
+        prompt_text = str((agent or {}).get("prompt_override") or "").strip() or runtime["prompt_template"]
         workflow_result = await run_chat_workflow_with_runtime(
             question=question,
             phone=phone,
             cache_key=_tenant_cache_key(tenant_id, question),
             tenant_id=tenant_id,
+            agent_id=active_agent_id,
             session_id=session_id,
             request_id=request.state.request_id,
             rag_runtime=runtime["rag_runtime"],
-            app_loader=lambda: runtime["app_settings"],
+            app_loader=lambda: app_settings,
             model_loader=lambda: runtime["model_settings"],
-            prompt_loader=lambda: runtime["prompt_template"],
+            prompt_loader=lambda: prompt_text,
             llm_context=llm_context,
+            knowledge_scope=(agent or {}).get("knowledge_scope") or {},
+            allowed_tools=(agent or {}).get("tool_scope") or [],
+            mcp_servers=(agent or {}).get("mcp_servers") or [],
         )
     else:
         workflow_result = await run_chat_workflow(
@@ -627,6 +746,7 @@ async def chat_endpoint(request: Request):
             phone=phone,
             cache_key=question,
             tenant_id="default",
+            agent_id=active_agent_id,
             session_id=session_id,
             request_id=request.state.request_id,
             llm_context=llm_context,
@@ -637,6 +757,7 @@ async def chat_endpoint(request: Request):
         question=question,
         workflow_result=workflow_result,
         tenant_id=tenant_id,
+        agent_id=active_agent_id,
         session_id=session_id,
     )
 
@@ -646,16 +767,20 @@ async def chat_sessions_list(request: Request):
     body = await request.json()
     phone = str(body.get("phone", "") or "").strip()
     password = str(body.get("password", "") or "").strip()
-    uuid_value = str(body.get("uuid", "") or "").strip()
-    if not phone or not password or not uuid_value:
+    agent_id = str(body.get("agent_id", "") or "").strip()
+    if not phone or not password:
         return JSONResponse({"ok": False, "msg": "未授权"}, status_code=401)
     try:
-        _, account = _verify_front_chat_user(phone, password, uuid_value)
+        _, account, agent = _verify_front_chat_user(phone, password, requested_agent_id=agent_id)
     except HTTPException as exc:
         return JSONResponse({"ok": False, "msg": str(exc.detail)}, status_code=exc.status_code)
     cleanup_empty_chat_sessions(phone=phone, tenant_id=account["tenant_id"], keep_latest=1)
-    sessions = list_chat_sessions(phone=phone, tenant_id=account["tenant_id"])
-    return {"ok": True, "sessions": sessions}
+    sessions = list_chat_sessions(
+        phone=phone,
+        tenant_id=account["tenant_id"],
+        agent_id=str((agent or {}).get("agent_id") or "").strip() if agent else None,
+    )
+    return {"ok": True, "sessions": sessions, "agent": _agent_public_payload(agent)}
 
 
 @app.post("/api/chat/sessions/create")
@@ -663,16 +788,21 @@ async def chat_sessions_create(request: Request):
     body = await request.json()
     phone = str(body.get("phone", "") or "").strip()
     password = str(body.get("password", "") or "").strip()
-    uuid_value = str(body.get("uuid", "") or "").strip()
     title = str(body.get("title", "") or "").strip()
-    if not phone or not password or not uuid_value:
+    agent_id = str(body.get("agent_id", "") or "").strip()
+    if not phone or not password:
         return JSONResponse({"ok": False, "msg": "未授权"}, status_code=401)
     try:
-        _, account = _verify_front_chat_user(phone, password, uuid_value)
+        _, account, agent = _verify_front_chat_user(phone, password, requested_agent_id=agent_id)
     except HTTPException as exc:
         return JSONResponse({"ok": False, "msg": str(exc.detail)}, status_code=exc.status_code)
-    session = create_chat_session(phone=phone, tenant_id=account["tenant_id"], title=title or "新对话")
-    return {"ok": True, "session": session}
+    session = create_chat_session(
+        phone=phone,
+        tenant_id=account["tenant_id"],
+        agent_id=str((agent or {}).get("agent_id") or "").strip(),
+        title=title or "新对话",
+    )
+    return {"ok": True, "session": session, "agent": _agent_public_payload(agent)}
 
 
 @app.post("/api/chat/sessions/messages")
@@ -680,22 +810,48 @@ async def chat_sessions_messages(request: Request):
     body = await request.json()
     phone = str(body.get("phone", "") or "").strip()
     password = str(body.get("password", "") or "").strip()
-    uuid_value = str(body.get("uuid", "") or "").strip()
     session_id = str(body.get("session_id", "") or "").strip()
-    if not phone or not password or not uuid_value:
+    agent_id = str(body.get("agent_id", "") or "").strip()
+    if not phone or not password:
         return JSONResponse({"ok": False, "msg": "未授权"}, status_code=401)
     if not session_id:
         return JSONResponse({"ok": False, "msg": "缺少会话ID"}, status_code=400)
     try:
-        _, account = _verify_front_chat_user(phone, password, uuid_value)
+        _, account, agent = _verify_front_chat_user(phone, password, requested_agent_id=agent_id)
     except HTTPException as exc:
         return JSONResponse({"ok": False, "msg": str(exc.detail)}, status_code=exc.status_code)
     messages = list_chat_session_messages(
         session_id=session_id,
         phone=phone,
         tenant_id=account["tenant_id"],
+        agent_id=str((agent or {}).get("agent_id") or "").strip() if agent else None,
     )
-    return {"ok": True, "messages": messages}
+    return {"ok": True, "messages": messages, "agent": _agent_public_payload(agent)}
+
+
+@app.post("/api/chat/agents")
+async def front_chat_agents(request: Request):
+    """前台：返回当前账号可访问的智能体列表，便于做独立入口和切换器。"""
+    body = await request.json()
+    phone = str(body.get("phone", "") or "").strip()
+    password = str(body.get("password", "") or "").strip()
+    if not phone or not password:
+        return JSONResponse({"ok": False, "msg": "未授权"}, status_code=401)
+    try:
+        _, account, active_agent = _verify_front_chat_user(phone, password, requested_agent_id=str(body.get("agent_id", "") or "").strip())
+    except HTTPException as exc:
+        return JSONResponse({"ok": False, "msg": str(exc.detail)}, status_code=exc.status_code)
+    tenant_id = str(account.get("tenant_id") or "default").strip() or "default"
+    bound_ids = list_user_agent_bindings(tenant_id=tenant_id, phone=phone)
+    items = list_agents(tenant_id, include_disabled=False)
+    if bound_ids:
+        allowed = set(bound_ids)
+        items = [item for item in items if item.get("agent_id") in allowed]
+    return {
+        "ok": True,
+        "items": [_agent_public_payload(item) for item in items],
+        "active_agent": _agent_public_payload(active_agent),
+    }
 
 # --- Queue Status Endpoint ---
 @app.get("/api/queue/status")
@@ -767,11 +923,20 @@ async def admin_run_evaluations(request: Request):
     name = str(body.get("name") or "平台检索评测").strip() or "平台检索评测"
     backend_override = str(body.get("backend_override") or "").strip() or None
     retrieval_settings = load_retrieval_config()
-    result = run_retrieval_evaluation(
+    result = await run_retrieval_evaluation(
         rag_runtime=rag_engine,
         cases=cases,
         retrieval_config=retrieval_settings,
         backend_override=backend_override,
+        tenant_id="default",
+        app_loader=load_app_config,
+        model_loader=load_model_config,
+        prompt_loader=load_system_prompt_template,
+        llm_context={
+            "default_base_url": LLM_BASE_URL,
+            "ssl_ctx": _ssl_ctx,
+            "user_facing_error": user_facing_llm_error,
+        },
     )
     record_evaluation_run(
         tenant_id="default",
@@ -940,6 +1105,7 @@ async def tenant_chat_endpoint(request: Request):
     body = await request.json()
     question = str(body.get("question", "") or "").strip()
     operator = str(body.get("operator", "") or "").strip() or tenant["admin_username"]
+    agent_id = str(body.get("agent_id", "") or "").strip()
     request.state.ob_user_phone = operator
     request.state.ob_tenant_id = tenant["tenant_id"]
 
@@ -948,21 +1114,32 @@ async def tenant_chat_endpoint(request: Request):
         return JSONResponse({"ok": False, "msg": "请输入问题"}, status_code=400)
 
     runtime = _tenant_runtime_bundle(tenant)
+    agent = get_agent(tenant["tenant_id"], agent_id) if agent_id else None
+    if agent_id and not agent:
+        return JSONResponse({"ok": False, "msg": "智能体不存在"}, status_code=404)
+    if agent and not agent.get("enabled", True):
+        return JSONResponse({"ok": False, "msg": "智能体已停用"}, status_code=400)
+    app_settings = _apply_agent_overrides(runtime["app_settings"], agent)
+    prompt_text = str((agent or {}).get("prompt_override") or "").strip() or runtime["prompt_template"]
     workflow_result = await run_chat_workflow_with_runtime(
         question=question,
         phone=operator,
         cache_key=_tenant_cache_key(tenant["tenant_id"], question),
         tenant_id=tenant["tenant_id"],
+        agent_id=str((agent or {}).get("agent_id") or "").strip(),
         request_id=request.state.request_id,
         rag_runtime=runtime["rag_runtime"],
-        app_loader=lambda: runtime["app_settings"],
+        app_loader=lambda: app_settings,
         model_loader=lambda: runtime["model_settings"],
-        prompt_loader=lambda: runtime["prompt_template"],
+        prompt_loader=lambda: prompt_text,
         llm_context={
             "default_base_url": LLM_BASE_URL,
             "ssl_ctx": _ssl_ctx,
             "user_facing_error": user_facing_llm_error,
         },
+        knowledge_scope=(agent or {}).get("knowledge_scope") or {},
+        allowed_tools=(agent or {}).get("tool_scope") or [],
+        mcp_servers=(agent or {}).get("mcp_servers") or [],
     )
     return _stream_chat_response(
         request=request,
@@ -970,6 +1147,7 @@ async def tenant_chat_endpoint(request: Request):
         question=question,
         workflow_result=workflow_result,
         tenant_id=tenant["tenant_id"],
+        agent_id=str((agent or {}).get("agent_id") or "").strip(),
     )
 
 @app.post("/api/admin/knowledge/upload")
@@ -1123,6 +1301,7 @@ async def admin_get_model_config(request: Request):
             "base_url": config_data.get("base_url", ""),
             "model_primary": config_data.get("model_primary", ""),
             "model_fallback": config_data.get("model_fallback", ""),
+            "providers": config_data.get("providers", []),
         },
         "api_keys_text": "\n".join(config_data.get("api_keys", [])),
     }
@@ -1171,6 +1350,7 @@ async def admin_update_model_config(request: Request):
                 "base_url": body.get("base_url", ""),
                 "model_primary": body.get("model_primary", ""),
                 "model_fallback": body.get("model_fallback", ""),
+                "providers": body.get("providers", []),
             },
             body.get("api_keys_text", ""),
         )
@@ -1440,6 +1620,7 @@ async def tenant_get_model_config(request: Request):
             "base_url": config_data.get("base_url", ""),
             "model_primary": config_data.get("model_primary", ""),
             "model_fallback": config_data.get("model_fallback", ""),
+            "providers": config_data.get("providers", []),
         },
         "api_keys_text": "\n".join(config_data.get("api_keys", [])),
         "path": model_path,
@@ -1460,6 +1641,7 @@ async def tenant_update_model_config(request: Request):
                 "base_url": body.get("base_url", ""),
                 "model_primary": body.get("model_primary", ""),
                 "model_fallback": body.get("model_fallback", ""),
+                "providers": body.get("providers", []),
             },
             body.get("api_keys_text", ""),
             tenant_id=tenant["tenant_id"],
@@ -1576,6 +1758,201 @@ async def tenant_update_tool_config(request: Request):
     return {"ok": True, "msg": "租户工具配置已保存", "config": saved}
 
 
+@app.get("/api/tenant/workflows")
+async def tenant_get_workflows(request: Request):
+    """租户后台：读取本租户工作流配置。"""
+    tenant = verify_tenant_admin_request(request)
+    workflow_cfg = load_workflow_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    model_cfg = load_model_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    retrieval_cfg = load_retrieval_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    tool_cfg = load_tool_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    mcp_servers = list_enabled_mcp_servers(tool_cfg)
+    paths = get_tenant_paths(tenant["tenant_id"])
+    providers = model_cfg.get("providers", [])
+    model_options: list[dict] = []
+    for provider in providers:
+        provider_label = str(provider.get("label") or provider.get("id") or "供应商")
+        for model_name in [provider.get("model_primary"), provider.get("model_fallback")]:
+            text = str(model_name or "").strip()
+            if text and not any(item["value"] == text for item in model_options):
+                model_options.append({"value": text, "label": f"{provider_label} / {text}"})
+    if not model_options:
+        model_options.append({"value": "__default__", "label": "当前可用模型"})
+    workflow_summaries = []
+    for item in workflow_cfg.get("items", []):
+        workflow_summaries.append(
+            {
+                "id": item.get("workflow_id"),
+                "workflow_id": item.get("workflow_id"),
+                "name": item.get("name"),
+                "description": item.get("description", ""),
+                "version": item.get("version", "V1.0"),
+                "status": item.get("status", "draft"),
+                "enabled": bool(item.get("enabled", True)),
+                "updatedAt": item.get("updated_at", ""),
+                "nodeCount": len(item.get("nodes") or []),
+                "nodes": item.get("nodes") or [],
+                "connections": item.get("connections") or [],
+            }
+        )
+    return {
+        "ok": True,
+        "tenant": tenant,
+        "default_workflow_id": workflow_cfg.get("default_workflow_id", ""),
+        "items": workflow_summaries,
+        "capabilities": {
+            "models": model_options,
+            "knowledge_bases": [
+                {"value": "全部知识库", "label": "全部知识库"},
+                *[
+                    {"value": item.get("library_id", ""), "label": item.get("name", item.get("library_id", ""))}
+                    for item in list_knowledge_libraries(tenant["tenant_id"], tenant["tenant_name"])
+                ],
+            ],
+            "retrieval_backend": retrieval_cfg.get("backend", "hybrid"),
+            "notification_channels": [
+                {"value": "邮件", "label": "邮件"},
+                {"value": "短信", "label": "短信"},
+                {"value": "企业微信", "label": "企业微信"},
+                {"value": "钉钉", "label": "钉钉"},
+                {"value": "站内推送", "label": "站内推送"},
+            ],
+            "email_enabled": bool((tool_cfg.get("email") or {}).get("enabled")),
+            "mcp_servers": [
+                {
+                    "value": item.get("server_id", ""),
+                    "label": item.get("label", item.get("server_id", "")),
+                }
+                for item in mcp_servers
+            ],
+        },
+        "path": paths["workflow_config"],
+        "mtime": os.path.getmtime(paths["workflow_config"]),
+        "size": os.path.getsize(paths["workflow_config"]),
+    }
+
+
+@app.put("/api/tenant/workflows")
+async def tenant_update_workflows(request: Request):
+    """租户后台：保存本租户工作流配置。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    items = body.get("items")
+    if not isinstance(items, list):
+        return JSONResponse({"ok": False, "msg": "缺少工作流数组"}, status_code=400)
+    current = load_workflow_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    default_workflow_id = str(body.get("default_workflow_id") or current.get("default_workflow_id") or "").strip()
+    try:
+        saved = save_workflow_config(
+            {
+                "default_workflow_id": default_workflow_id,
+                "items": items,
+            },
+            tenant_id=tenant["tenant_id"],
+            tenant_name=tenant["tenant_name"],
+        )
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    return {"ok": True, "msg": "租户工作流已保存", **saved}
+
+
+@app.post("/api/tenant/workflows/publish")
+async def tenant_publish_workflow(request: Request):
+    """租户后台：发布指定工作流。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    workflow_id = str(body.get("workflow_id") or "").strip()
+    if not workflow_id:
+        return JSONResponse({"ok": False, "msg": "缺少 workflow_id"}, status_code=400)
+    config = load_workflow_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    items = list(config.get("items") or [])
+    target = next((item for item in items if item.get("workflow_id") == workflow_id), None)
+    if not target:
+        return JSONResponse({"ok": False, "msg": "未找到对应工作流"}, status_code=404)
+    target["status"] = "published"
+    target["updated_at"] = _now_text()
+    version = str(target.get("version") or "V1.0").lstrip("V")
+    major, _, minor = version.partition(".")
+    try:
+        major_int = int(major or "1")
+    except Exception:
+        major_int = 1
+    try:
+        minor_int = int(minor or "0")
+    except Exception:
+        minor_int = 0
+    target["version"] = f"V{major_int}.{minor_int + 1}"
+    if not str(config.get("default_workflow_id") or "").strip():
+        config["default_workflow_id"] = workflow_id
+    saved = save_workflow_config(config, tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    return {"ok": True, "msg": "工作流已发布", **saved}
+
+
+@app.post("/api/tenant/workflows/unpublish")
+async def tenant_unpublish_workflow(request: Request):
+    """租户后台：取消发布指定工作流。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    workflow_id = str(body.get("workflow_id") or "").strip()
+    if not workflow_id:
+        return JSONResponse({"ok": False, "msg": "缺少 workflow_id"}, status_code=400)
+    config = load_workflow_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    items = list(config.get("items") or [])
+    target = next((item for item in items if item.get("workflow_id") == workflow_id), None)
+    if not target:
+        return JSONResponse({"ok": False, "msg": "未找到对应工作流"}, status_code=404)
+    target["status"] = "draft"
+    target["updated_at"] = _now_text()
+    if str(config.get("default_workflow_id") or "").strip() == workflow_id:
+        config["default_workflow_id"] = ""
+    saved = save_workflow_config(config, tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    return {"ok": True, "msg": "工作流已取消发布", **saved}
+
+
+@app.delete("/api/tenant/workflows/{workflow_id}")
+async def tenant_delete_workflow(request: Request, workflow_id: str):
+    """租户后台：删除指定工作流。"""
+    tenant = verify_tenant_admin_request(request)
+    workflow_id = str(workflow_id or "").strip()
+    if not workflow_id:
+        return JSONResponse({"ok": False, "msg": "缺少 workflow_id"}, status_code=400)
+    config = load_workflow_config(tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    items = list(config.get("items") or [])
+    remained = [item for item in items if str(item.get("workflow_id") or "").strip() != workflow_id]
+    if len(remained) == len(items):
+        return JSONResponse({"ok": False, "msg": "未找到对应工作流"}, status_code=404)
+    if str(config.get("default_workflow_id") or "").strip() == workflow_id:
+        config["default_workflow_id"] = str((remained[0].get("workflow_id") if remained else "") or "").strip()
+    config["items"] = remained
+    saved = save_workflow_config(config, tenant_id=tenant["tenant_id"], tenant_name=tenant["tenant_name"])
+    return {"ok": True, "msg": "工作流已删除", **saved}
+
+
+@app.post("/api/tenant/workflows/run")
+async def tenant_run_workflow(request: Request):
+    """租户后台：试运行指定工作流。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    workflow_id = str(body.get("workflow_id") or "").strip()
+    input_payload = body.get("input")
+    if input_payload is None:
+        input_payload = {}
+    if not isinstance(input_payload, dict):
+        return JSONResponse({"ok": False, "msg": "输入参数必须是 JSON 对象"}, status_code=400)
+    try:
+        result = await execute_tenant_workflow(
+            tenant_id=tenant["tenant_id"],
+            tenant_name=tenant["tenant_name"],
+            workflow_id=workflow_id or None,
+            input_payload=input_payload,
+        )
+    except WorkflowRuntimeError as exc:
+        return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "msg": f"工作流运行失败: {exc}"}, status_code=500)
+    return {"ok": True, "result": result}
+
+
 @app.post("/api/tenant/crawler-config/run")
 async def tenant_run_crawler_config(request: Request):
     """租户后台：执行本租户的单条采集源。"""
@@ -1653,7 +2030,17 @@ async def tenant_knowledge_files(request: Request):
     tenant = verify_tenant_admin_request(request)
     knowledge_root = get_tenant_knowledge_dir(tenant["tenant_id"])
     os.makedirs(knowledge_root, exist_ok=True)
+    available_tags = list_knowledge_tags(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    tag_groups = list_knowledge_tag_groups(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    libraries = list_knowledge_libraries(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    categories = list_knowledge_categories(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    categories_by_library: dict[str, list[dict]] = defaultdict(list)
+    for item in categories:
+        categories_by_library[str(item.get("library_id") or "")].append(dict(item))
+    library_index = {str(item.get("library_id") or ""): dict(item) for item in libraries}
     items: list[dict] = []
+    library_files: dict[str, list[dict]] = defaultdict(list)
+    category_counts: dict[str, int] = defaultdict(int)
     for tier_name in _knowledge_tiers():
         tier_dir = os.path.join(knowledge_root, tier_name)
         os.makedirs(tier_dir, exist_ok=True)
@@ -1673,11 +2060,24 @@ async def tenant_knowledge_files(request: Request):
             files.append(
                 {
                     "name": name,
+                    "file_key": f"{_public_tier_code(tier_name)}/{name}",
                     "size": os.path.getsize(fpath),
                     "mtime": os.path.getmtime(fpath),
                     "preview": preview,
+                    **get_knowledge_file_meta(
+                        tenant["tenant_id"],
+                        tier_name,
+                        name,
+                        tenant.get("tenant_name", ""),
+                    ),
                 }
             )
+            file_meta = files[-1]
+            library_id = str(file_meta.get("library_id") or libraries[0]["library_id"])
+            category_id = str(file_meta.get("category_id") or "")
+            library_files[library_id].append(file_meta)
+            if category_id:
+                category_counts[category_id] += 1
         items.append(
             {
                 "tier": _public_tier_code(tier_name),
@@ -1685,7 +2085,53 @@ async def tenant_knowledge_files(request: Request):
                 "files": files,
             }
         )
-    return {"ok": True, "tenant": tenant, "items": items}
+    library_payload: list[dict] = []
+    for library in libraries:
+        library_id = str(library.get("library_id") or "")
+        files = library_files.get(library_id, [])
+        library_payload.append(
+            {
+                **library,
+                "file_count": len(files),
+                "categories": [
+                    {
+                        **item,
+                        "file_count": int(category_counts.get(str(item.get("category_id") or ""), 0)),
+                    }
+                    for item in categories_by_library.get(library_id, [])
+                ],
+            }
+        )
+    return {
+        "ok": True,
+        "tenant": tenant,
+        "items": items,
+        "libraries": library_payload,
+        "categories": categories,
+        "available_tags": available_tags,
+        "tag_catalog": available_tags,
+        "tag_groups": tag_groups,
+    }
+
+
+@app.put("/api/tenant/knowledge/libraries")
+async def tenant_save_knowledge_libraries(request: Request):
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    libraries = body.get("libraries") if isinstance(body.get("libraries"), list) else []
+    categories = body.get("categories") if isinstance(body.get("categories"), list) else []
+    metadata = save_knowledge_structure(
+        tenant["tenant_id"],
+        libraries=libraries,
+        categories=categories,
+        tenant_name=tenant.get("tenant_name", ""),
+    )
+    return {
+        "ok": True,
+        "libraries": metadata.get("libraries") or [],
+        "categories": metadata.get("categories") or [],
+        "msg": "知识库结构已保存",
+    }
 
 
 @app.get("/api/tenant/knowledge/download")
@@ -1715,7 +2161,83 @@ async def tenant_get_knowledge_file_content(request: Request, tier: str = "", fi
         content = Path(fpath).read_text(encoding="utf-8")
     except Exception as exc:
         return JSONResponse({"ok": False, "msg": f"读取失败：{exc}"}, status_code=500)
-    return {"ok": True, "tier": _public_tier_code(canonical_tier), "file": file, "content": content}
+    meta = get_knowledge_file_meta(tenant["tenant_id"], canonical_tier, file, tenant.get("tenant_name", ""))
+    return {
+        "ok": True,
+        "tier": _public_tier_code(canonical_tier),
+        "file": file,
+        "file_key": f"{_public_tier_code(canonical_tier)}/{file}",
+        "content": content,
+        "tags": meta.get("tags", []),
+        "library_id": meta.get("library_id", ""),
+        "category_id": meta.get("category_id", ""),
+    }
+
+
+@app.get("/api/tenant/knowledge/tags")
+async def tenant_knowledge_tags(request: Request):
+    tenant = verify_tenant_admin_request(request)
+    tags = list_knowledge_tags(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    groups = list_knowledge_tag_groups(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    return {"ok": True, "items": tags, "groups": groups}
+
+
+@app.put("/api/tenant/knowledge/tags")
+async def tenant_save_knowledge_tags(request: Request):
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    raw_groups = body.get("groups") if isinstance(body.get("groups"), list) else None
+    if raw_groups is not None:
+        groups = save_knowledge_tag_groups(tenant["tenant_id"], raw_groups, tenant.get("tenant_name", ""))
+        tags = list_knowledge_tags(tenant["tenant_id"], tenant.get("tenant_name", ""))
+        return {"ok": True, "items": tags, "groups": groups, "msg": "标签目录已保存"}
+    raw_tags = body.get("tags") if isinstance(body.get("tags"), list) else []
+    tags = save_knowledge_tag_catalog(tenant["tenant_id"], raw_tags, tenant.get("tenant_name", ""))
+    groups = list_knowledge_tag_groups(tenant["tenant_id"], tenant.get("tenant_name", ""))
+    return {"ok": True, "items": tags, "groups": groups, "msg": "标签目录已保存"}
+
+
+@app.get("/api/tenant/knowledge/file/chunks")
+async def tenant_knowledge_file_chunks(request: Request):
+    tenant = verify_tenant_admin_request(request)
+    tier = str(request.query_params.get("tier", "")).strip()
+    file = str(request.query_params.get("file", "")).strip()
+    canonical_tier = _canonical_tier(tier)
+    if canonical_tier not in _knowledge_tiers() or not file:
+        return JSONResponse({"ok": False, "msg": "参数错误"}, status_code=400)
+    fpath = os.path.join(get_tenant_knowledge_dir(tenant["tenant_id"]), canonical_tier, file)
+    if not os.path.isfile(fpath):
+        return JSONResponse({"ok": False, "msg": "文件不存在"}, status_code=404)
+    try:
+        content = Path(fpath).read_text(encoding="utf-8")
+    except Exception:
+        content = Path(fpath).read_text(encoding="utf-8", errors="ignore")
+    try:
+        chunks = split_documents_for_stats(content)
+    except Exception:
+        # 解析详情是观测能力，不能因为切片异常影响页面使用。
+        fallback_blocks = [block.strip() for block in content.replace("\r", "").split("\n\n") if block.strip()]
+        if not fallback_blocks:
+            fallback_blocks = [content.strip()] if content.strip() else []
+        chunks = []
+        for block in fallback_blocks:
+            chunks.append(type("SimpleChunk", (), {"page_content": block, "metadata": {}})())
+    return {
+        "ok": True,
+        "tier": _public_tier_code(canonical_tier),
+        "file": file,
+        "size": os.path.getsize(fpath),
+        "chunk_count": len(chunks),
+        "content": content,
+        "chunks": [
+            {
+                "index": index + 1,
+                "text": str(doc.page_content or "").strip(),
+                "meta": dict(doc.metadata or {}),
+            }
+            for index, doc in enumerate(chunks)
+        ],
+    }
 
 
 @app.put("/api/tenant/knowledge/file")
@@ -1726,6 +2248,9 @@ async def tenant_update_knowledge_file(request: Request):
     tier = str(body.get("tier", "")).strip()
     file = str(body.get("file", "")).strip()
     content = str(body.get("content", ""))
+    raw_tags = body.get("tags") if isinstance(body.get("tags"), list) else None
+    library_id = str(body.get("library_id") or "").strip()
+    category_id = str(body.get("category_id") or "").strip()
     canonical_tier = _canonical_tier(tier)
     if canonical_tier not in _knowledge_tiers() or not file:
         return JSONResponse({"ok": False, "msg": "参数错误"}, status_code=400)
@@ -1736,7 +2261,24 @@ async def tenant_update_knowledge_file(request: Request):
         Path(fpath).write_text(content, encoding="utf-8")
     except Exception as exc:
         return JSONResponse({"ok": False, "msg": f"保存失败：{exc}"}, status_code=500)
-    return {"ok": True, "msg": f"已保存 {file}"}
+    if raw_tags is not None or library_id or category_id:
+        set_knowledge_file_meta(
+            tenant["tenant_id"],
+            tier=canonical_tier,
+            file_name=file,
+            tags=raw_tags,
+            library_id=library_id,
+            category_id=category_id,
+            tenant_name=tenant.get("tenant_name", ""),
+        )
+    meta = get_knowledge_file_meta(tenant["tenant_id"], canonical_tier, file, tenant.get("tenant_name", ""))
+    return {
+        "ok": True,
+        "msg": f"已保存 {file}",
+        "tags": meta.get("tags", []),
+        "library_id": meta.get("library_id", ""),
+        "category_id": meta.get("category_id", ""),
+    }
 
 
 @app.post("/api/tenant/knowledge/upload")
@@ -1744,6 +2286,13 @@ async def tenant_upload_knowledge(request: Request, file: UploadFile = File(...)
     """租户后台：上传本租户知识文件。"""
     tenant = verify_tenant_admin_request(request)
     tier = request.query_params.get("tier", "permanent")
+    upload_tags = [
+        item.strip()
+        for item in str(request.query_params.get("tags", "") or "").replace("，", ",").split(",")
+        if item.strip()
+    ]
+    library_id = str(request.query_params.get("library_id", "") or "").strip()
+    category_id = str(request.query_params.get("category_id", "") or "").strip()
     if tier not in _knowledge_tiers() and tier not in {"L1", "L2", "L3"}:
         return JSONResponse({"ok": False, "msg": "无效的知识层级"}, status_code=400)
     content = await file.read()
@@ -1761,6 +2310,15 @@ async def tenant_upload_knowledge(request: Request, file: UploadFile = File(...)
     tenant_root = get_tenant_knowledge_dir(tenant["tenant_id"])
     tier_dir = os.path.join(tenant_root, parsed.canonical_tier)
     _write_parsed_knowledge_file(tier_dir=tier_dir, parsed=parsed)
+    set_knowledge_file_meta(
+        tenant["tenant_id"],
+        tier=parsed.canonical_tier,
+        file_name=parsed.filename,
+        tags=upload_tags,
+        library_id=library_id,
+        category_id=category_id,
+        tenant_name=tenant.get("tenant_name", ""),
+    )
     return {
         "ok": True,
         "msg": _human_readable_upload_result(parsed=parsed, tier_label=_knowledge_tiers()[parsed.canonical_tier]["label"]),
@@ -1768,6 +2326,61 @@ async def tenant_upload_knowledge(request: Request, file: UploadFile = File(...)
         "stored_file": parsed.filename,
         "source_type": parsed.source_type,
     }
+
+
+@app.post("/api/tenant/knowledge/upload-web")
+async def tenant_upload_web_knowledge(request: Request):
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    urls = body.get("urls") if isinstance(body.get("urls"), list) else []
+    urls = [str(item or "").strip() for item in urls if str(item or "").strip()]
+    if not urls:
+        return JSONResponse({"ok": False, "msg": "请至少填写一个网页地址"}, status_code=400)
+    tier = str(body.get("tier") or "L2").strip() or "L2"
+    library_id = str(body.get("library_id") or "").strip()
+    category_id = str(body.get("category_id") or "").strip()
+    tags = body.get("tags") if isinstance(body.get("tags"), list) else []
+    tier = _public_tier_code(_canonical_tier(tier))
+    knowledge_root = get_tenant_knowledge_dir(tenant["tenant_id"])
+    results: list[dict] = []
+    for index, url in enumerate(urls, start=1):
+        source = {
+            "source_id": f"web_{uuid.uuid4().hex[:8]}",
+            "name": f"网页导入 {index}",
+            "url": url,
+            "tier": tier,
+            "source_type": "web",
+            "rule_text": "",
+        }
+        try:
+            result = run_generic_crawler(source, knowledge_root)
+        except GenericCrawlerError as exc:
+            results.append({"url": url, "ok": False, "msg": str(exc)})
+            continue
+        except Exception as exc:
+            results.append({"url": url, "ok": False, "msg": f"网页导入失败：{exc}"})
+            continue
+        output_name = Path(result.output_file).name
+        set_knowledge_file_meta(
+            tenant["tenant_id"],
+            tier=result.tier,
+            file_name=output_name,
+            tags=tags,
+            library_id=library_id,
+            category_id=category_id,
+            tenant_name=tenant.get("tenant_name", ""),
+        )
+        results.append(
+            {
+                "url": url,
+                "ok": True,
+                "stored_file": output_name,
+                "title": result.title,
+                "items_count": result.items_count,
+            }
+        )
+    success_count = len([item for item in results if item.get("ok")])
+    return {"ok": success_count > 0, "items": results, "msg": f"已完成 {success_count}/{len(urls)} 个网页导入"}
 
 
 @app.delete("/api/tenant/knowledge/file")
@@ -1781,14 +2394,21 @@ async def tenant_delete_knowledge_file(request: Request, tier: str = "", file: s
     if not os.path.isfile(fpath):
         return JSONResponse({"ok": False, "msg": "文件不存在"}, status_code=404)
     os.remove(fpath)
+    delete_knowledge_file_meta(tenant["tenant_id"], canonical_tier, file, tenant.get("tenant_name", ""))
     return {"ok": True, "msg": f"已删除 {file}"}
 
 
 @app.get("/api/tenant/chat-logs")
-async def tenant_chat_logs(request: Request, page: int = 1, phone: str = ""):
+async def tenant_chat_logs(request: Request, page: int = 1, phone: str = "", agent_id: str = ""):
     """租户后台：查看本租户聊天日志。"""
     tenant = verify_tenant_admin_request(request)
-    logs, total = list_chat_logs(page=page, per_page=20, phone=phone, tenant_id=tenant["tenant_id"])
+    logs, total = list_chat_logs(
+        page=page,
+        per_page=20,
+        phone=phone,
+        tenant_id=tenant["tenant_id"],
+        agent_id=agent_id.strip() or None,
+    )
     return {"ok": True, "logs": logs, "total": total, "page": page}
 
 
@@ -1797,6 +2417,11 @@ async def tenant_users(request: Request, page: int = 1):
     """租户后台：查看当前租户手机号成员账号。"""
     tenant = verify_tenant_admin_request(request)
     items, total = list_tenant_phone_accounts(tenant["tenant_id"], page=page, per_page=50)
+    for item in items:
+        item["agent_ids"] = list_user_agent_bindings(
+            tenant_id=tenant["tenant_id"],
+            phone=str(item.get("username") or "").strip(),
+        )
     return {"ok": True, "items": items, "total": total, "page": page}
 
 
@@ -1809,6 +2434,7 @@ async def tenant_save_user(request: Request):
     display_name = str(body.get("display_name", "")).strip()
     password = str(body.get("password", "")).strip()
     enabled = bool(body.get("enabled", True))
+    agent_ids = body.get("agent_ids") or []
     if not phone:
         return JSONResponse({"ok": False, "msg": "手机号不能为空"}, status_code=400)
     result = save_tenant_phone_account(
@@ -1821,7 +2447,20 @@ async def tenant_save_user(request: Request):
     status = 200 if result.get("ok") else 400
     if not result.get("ok"):
         return JSONResponse(result, status_code=status)
+    if isinstance(agent_ids, list):
+        bind_result = save_user_agent_bindings(
+            tenant_id=tenant["tenant_id"],
+            phone=phone,
+            agent_ids=agent_ids,
+        )
+        if not bind_result.get("ok"):
+            return JSONResponse(bind_result, status_code=400)
     items, total = list_tenant_phone_accounts(tenant["tenant_id"], page=1, per_page=50)
+    for item in items:
+        item["agent_ids"] = list_user_agent_bindings(
+            tenant_id=tenant["tenant_id"],
+            phone=str(item.get("username") or "").strip(),
+        )
     return {"ok": True, "msg": result.get("msg", "保存成功"), "items": items, "total": total}
 
 
@@ -1838,6 +2477,110 @@ async def tenant_toggle_user(request: Request):
     status = 200 if result.get("ok") else 404
     if not result.get("ok"):
         return JSONResponse(result, status_code=status)
+    return result
+
+
+@app.get("/api/tenant/agents")
+async def tenant_agents(request: Request):
+    """租户后台：查看当前租户智能体列表。"""
+    tenant = verify_tenant_admin_request(request)
+    return {"ok": True, "items": list_agents(tenant["tenant_id"])}
+
+
+@app.post("/api/tenant/agents")
+async def tenant_save_agent(request: Request):
+    """租户后台：创建或更新智能体。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    try:
+        agent = save_agent(
+            tenant_id=tenant["tenant_id"],
+            agent_id=body.get("agent_id", ""),
+            name=body.get("name", ""),
+            description=body.get("description", ""),
+            status=body.get("status", "draft"),
+            enabled=bool(body.get("enabled", True)),
+            avatar=body.get("avatar", ""),
+            welcome_message=body.get("welcome_message", ""),
+            input_placeholder=body.get("input_placeholder", ""),
+            recommended_questions=body.get("recommended_questions") if isinstance(body.get("recommended_questions"), list) else [],
+            prompt_override=body.get("prompt_override", ""),
+            workflow_id=body.get("workflow_id", ""),
+            knowledge_scope=body.get("knowledge_scope") if isinstance(body.get("knowledge_scope"), (dict, list)) else {},
+            model_override=(
+                body.get("model_override")
+                if isinstance(body.get("model_override"), dict)
+                else ({"model": str(body.get("model") or "").strip()} if str(body.get("model") or "").strip() else {})
+            ),
+            tool_scope=body.get("tool_scope") if isinstance(body.get("tool_scope"), list) else [],
+            mcp_servers=body.get("mcp_servers") if isinstance(body.get("mcp_servers"), list) else [],
+            is_default=bool(body.get("is_default", False)),
+        )
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    return {"ok": True, "agent": agent, "items": list_agents(tenant["tenant_id"])}
+
+
+@app.post("/api/tenant/agents/toggle")
+async def tenant_toggle_agent(request: Request):
+    """租户后台：启用或停用智能体。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    agent_id = str(body.get("agent_id", "") or "").strip()
+    enabled = bool(body.get("enabled", True))
+    if not agent_id:
+        return JSONResponse({"ok": False, "msg": "智能体ID不能为空"}, status_code=400)
+    result = toggle_agent(tenant_id=tenant["tenant_id"], agent_id=agent_id, enabled=enabled)
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=404)
+    return {"ok": True, "msg": result.get("msg", ""), "items": list_agents(tenant["tenant_id"])}
+
+
+@app.delete("/api/tenant/agents")
+async def tenant_delete_agent(request: Request, agent_id: str = ""):
+    """租户后台：删除智能体。"""
+    tenant = verify_tenant_admin_request(request)
+    clean_agent_id = str(agent_id or "").strip()
+    if not clean_agent_id:
+        return JSONResponse({"ok": False, "msg": "智能体ID不能为空"}, status_code=400)
+    result = delete_agent(tenant_id=tenant["tenant_id"], agent_id=clean_agent_id)
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=404)
+    return {"ok": True, "msg": result.get("msg", ""), "items": list_agents(tenant["tenant_id"])}
+
+
+@app.get("/api/tenant/users/agent-bindings")
+async def tenant_user_agent_bindings(request: Request, username: str = ""):
+    """租户后台：查看某个成员账号绑定的智能体。"""
+    tenant = verify_tenant_admin_request(request)
+    phone = str(username or "").strip()
+    if not phone:
+        return JSONResponse({"ok": False, "msg": "成员账号不能为空"}, status_code=400)
+    return {
+        "ok": True,
+        "username": phone,
+        "agent_ids": list_user_agent_bindings(tenant_id=tenant["tenant_id"], phone=phone),
+    }
+
+
+@app.post("/api/tenant/users/agent-bindings")
+async def tenant_save_user_agent_bindings(request: Request):
+    """租户后台：更新成员账号可访问的智能体。"""
+    tenant = verify_tenant_admin_request(request)
+    body = await request.json()
+    phone = str(body.get("username", "") or "").strip()
+    agent_ids = body.get("agent_ids") or []
+    if not phone:
+        return JSONResponse({"ok": False, "msg": "成员账号不能为空"}, status_code=400)
+    if not isinstance(agent_ids, list):
+        return JSONResponse({"ok": False, "msg": "agent_ids 必须为数组"}, status_code=400)
+    result = save_user_agent_bindings(
+        tenant_id=tenant["tenant_id"],
+        phone=phone,
+        agent_ids=agent_ids,
+    )
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=400)
     return result
 
 
@@ -1860,11 +2603,20 @@ async def tenant_run_evaluations(request: Request):
     name = str(body.get("name") or "租户检索评测").strip() or "租户检索评测"
     backend_override = str(body.get("backend_override") or "").strip() or None
     runtime = _tenant_runtime_bundle(tenant)
-    result = run_retrieval_evaluation(
+    result = await run_retrieval_evaluation(
         rag_runtime=runtime["rag_runtime"],
         cases=cases,
         retrieval_config=runtime["retrieval_settings"],
         backend_override=backend_override,
+        tenant_id=tenant["tenant_id"],
+        app_loader=lambda: runtime["app_settings"],
+        model_loader=lambda: runtime["model_settings"],
+        prompt_loader=lambda: runtime["prompt_template"],
+        llm_context={
+            "default_base_url": LLM_BASE_URL,
+            "ssl_ctx": _ssl_ctx,
+            "user_facing_error": user_facing_llm_error,
+        },
     )
     record_evaluation_run(
         tenant_id=tenant["tenant_id"],
@@ -2234,6 +2986,39 @@ async def serve_tenant_logs_v2():
 @app.api_route("/tenant-qa-v2", methods=["GET", "HEAD"])
 @app.api_route("/tenant/qa", methods=["GET", "HEAD"])
 async def serve_tenant_qa_v2():
+    fpath = os.path.join(FRONTEND_DIR, "tenant_v2.html")
+    with open(fpath, "r", encoding="utf-8") as f:
+        content = f.read()
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
+
+@app.api_route("/tenant/workflow", methods=["GET", "HEAD"])
+async def serve_tenant_workflow():
+    fpath = os.path.join(FRONTEND_DIR, "tenant_v2.html")
+    with open(fpath, "r", encoding="utf-8") as f:
+        content = f.read()
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
+
+@app.api_route("/tenant/agents", methods=["GET", "HEAD"])
+async def serve_tenant_agents():
+    fpath = os.path.join(FRONTEND_DIR, "tenant_v2.html")
+    with open(fpath, "r", encoding="utf-8") as f:
+        content = f.read()
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
+
+@app.api_route("/tenant/workflow/editor", methods=["GET", "HEAD"])
+async def serve_tenant_workflow_editor():
     fpath = os.path.join(FRONTEND_DIR, "tenant_v2.html")
     with open(fpath, "r", encoding="utf-8") as f:
         content = f.read()

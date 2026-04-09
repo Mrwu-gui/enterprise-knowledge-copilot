@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "training_coach",
+  "app_name": "新东方企业培训平台",
+  "app_subtitle": "学习计划、课程答疑与训练营运营平台",
+  "chat_title": "新东方成长教练",
+  "chat_tagline": "围绕学习目标、课程安排和作业反馈，生成更清晰的培训与辅导建议。",
+  "welcome_message": "你好，我是新东方成长教练。你可以让我推荐课程、拆解学习计划、解释训练营规则或生成辅导建议。",
+  "agent_description": "面向企业培训与学习成长场景的智能教练助手，负责学习计划生成、课程答疑与班级运营支持。",
+  "logo": "https://www.google.com/s2/favicons?domain=xdf.cn&sz=128",
+  "recommended_questions": [
+    "为新员工做一份 30 天销售训练营学习计划。",
+    "这节沟通课课后作业该怎么点评更有效？",
+    "缺课学员需要怎么安排补学流程？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "新东方培训后台登录 · 建议先确认学习阶段、课程计划和作业要求",
+  "input_placeholder": "输入学习目标、课程主题、学员情况或作业反馈诉求...",
+  "send_button_text": "生成学习建议",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "training_coach",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f6fff7",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#dcefdc",
+    "text": "#214b2f",
+    "muted": "#6a8f73",
+    "accent": "#1f9d53",
+    "accent_strong": "#16733c",
+    "accent_soft": "rgba(31, 157, 83, 0.12)",
+    "danger": "#d46060",
+    "primary": "#1f9d53",
+    "primary_deep": "#16733c",
+    "primary_soft": "rgba(31, 157, 83, 0.12)"
+  }
+}

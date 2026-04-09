@@ -1,0 +1,140 @@
+{
+  "default_workflow_id": "zhaopin_recruit_router",
+  "items": [
+    {
+      "workflow_id": "zhaopin_recruit_router",
+      "name": "智联招聘筛选分流",
+      "description": "先检索岗位标准与面试规则，再分流到招聘建议或通用兜底答复。",
+      "enabled": true,
+      "sort_order": 100,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-07 21:36:27",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户问题",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "招聘规则检索",
+            "description": "从岗位画像、面试标准与 offer 流程中检索相关内容",
+            "query": "{{input.text}}",
+            "knowledgeBase": "默认知识库",
+            "topK": 5,
+            "threshold": 0.16
+          }
+        },
+        {
+          "id": "condition_1",
+          "type": "condition",
+          "x": 660,
+          "y": 180,
+          "data": {
+            "label": "判断是否命中招聘规则",
+            "description": "命中则输出招聘建议，否则输出通用筛选建议",
+            "condition": "len(last.hits) > 0"
+          }
+        },
+        {
+          "id": "ai_hit",
+          "type": "ai",
+          "x": 980,
+          "y": 80,
+          "data": {
+            "label": "生成招聘建议",
+            "description": "结合岗位与规则给出筛选、面试或沟通建议",
+            "prompt": "你是智联招聘企业招聘中心的招聘助手。请基于用户问题和知识片段，输出结构化招聘建议。用户问题：{{input.text}}\n\n知识片段：{{last.knowledge_text}}\n\n要求：1. 先给结论；2. 如涉及候选人筛选，请列出优点、风险和建议；3. 如涉及流程，按步骤输出；4. 只输出最终答复。",
+            "model": "__default__",
+            "temperature": 0.3
+          }
+        },
+        {
+          "id": "ai_fallback",
+          "type": "ai",
+          "x": 980,
+          "y": 300,
+          "data": {
+            "label": "生成筛选兜底",
+            "description": "知识不足时给出通用招聘建议",
+            "prompt": "你是智联招聘企业招聘中心的招聘助手。当前知识库未命中明确规则。请输出谨慎的通用招聘建议。用户问题：{{input.text}}\n\n要求：1. 明确说明未检索到企业内部明确规则；2. 可以给一般招聘建议；3. 不要虚构企业制度。",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1290,
+          "y": 190,
+          "data": {
+            "label": "结束节点",
+            "description": "返回答复结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "condition_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "condition_1",
+          "to": "ai_hit",
+          "label": "true"
+        },
+        {
+          "id": "c4",
+          "from": "condition_1",
+          "to": "ai_fallback",
+          "label": "false"
+        },
+        {
+          "id": "c5",
+          "from": "ai_hit",
+          "to": "end_1",
+          "label": ""
+        },
+        {
+          "id": "c6",
+          "from": "ai_fallback",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "",
+        "chat_tagline": "",
+        "welcome_message": "",
+        "agent_description": "",
+        "recommended_questions": [],
+        "input_placeholder": "",
+        "send_button_text": ""
+      },
+      "system_prompt": "你是企业知识库的租户专属智能助理。\n\n请优先根据下方知识库内容回答；如果知识库没有明确答案，先说明知识不足，再给出谨慎建议。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    }
+  ],
+  "updated_at": 1775568987
+}

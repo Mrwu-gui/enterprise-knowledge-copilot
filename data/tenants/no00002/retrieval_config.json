@@ -2,26 +2,26 @@
   "backend": "hybrid",
   "qdrant": {
     "enabled": true,
-    "mode": "local",
-    "url": "",
-    "api_key": "",
+    "mode": "server",
+    "url": "https://e327263a-4eaf-4e9e-9f26-5db376fb214c.us-east-1-1.aws.cloud.qdrant.io",
+    "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.aPaCiKZTSEoW70PxGkHMomyXswwrowpKD6JKgg71guA",
     "path": "data/qdrant_store/no00002",
     "collection": "tenant_no00002_knowledge",
     "vector_size": 1024,
     "distance": "Cosine"
   },
   "embedding": {
-    "provider": "local_hash",
-    "model": "local_hash_v1",
-    "base_url": "",
-    "api_key": ""
+    "provider": "siliconcloud",
+    "model": "BAAI/bge-m3",
+    "base_url": "https://api.siliconflow.cn/v1/",
+    "api_key": "sk-zvytchsgjkkhzqrdzlnahmwxnnbouedmtvixrymyomjqdsbx"
   },
   "rerank": {
     "enabled": true,
-    "provider": "local_overlap",
-    "model": "local_overlap_v1",
-    "base_url": "",
-    "api_key": "",
+    "provider": "siliconcloud",
+    "model": "BAAI/bge-reranker-v2-m3",
+    "base_url": "https://api.siliconflow.cn/v1/",
+    "api_key": "sk-zvytchsgjkkhzqrdzlnahmwxnnbouedmtvixrymyomjqdsbx",
     "candidate_limit": 12,
     "top_n": 5
   },

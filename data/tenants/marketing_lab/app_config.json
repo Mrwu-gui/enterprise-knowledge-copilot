@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "marketing_lab",
+  "app_name": "伊利品牌增长实验室",
+  "app_subtitle": "品牌语气、活动内容与多平台传播中台",
+  "chat_title": "伊利增长官",
+  "chat_tagline": "围绕新品、节点活动和渠道差异，生成更统一的品牌内容与传播建议。",
+  "welcome_message": "你好，我是伊利增长官。告诉我产品、节点活动和目标平台，我会生成内容方向、投放节奏和品牌语气建议。",
+  "agent_description": "面向品牌营销与内容增长场景的智能营销助手，负责品牌语气对齐、内容策划与渠道节奏建议。",
+  "logo": "https://www.google.com/s2/favicons?domain=yili.com&sz=128",
+  "recommended_questions": [
+    "给安慕希新品生成 3 版小红书种草方向。",
+    "围绕儿童奶粉做一版母婴社群活动节奏。",
+    "伊利品牌文案里有哪些不能碰的表达？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "伊利品牌后台登录 · 建议先确认品牌语气、主推品类和活动节点",
+  "input_placeholder": "输入产品名称、活动目标、人群、平台和内容诉求...",
+  "send_button_text": "生成增长方案",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "marketing_lab",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f5fff9",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#d8efe2",
+    "text": "#1f4d35",
+    "muted": "#62846f",
+    "accent": "#1f9d55",
+    "accent_strong": "#15733d",
+    "accent_soft": "rgba(31, 157, 85, 0.14)",
+    "danger": "#d65d5d",
+    "primary": "#1f9d55",
+    "primary_deep": "#15733d",
+    "primary_soft": "rgba(31, 157, 85, 0.14)"
+  }
+}

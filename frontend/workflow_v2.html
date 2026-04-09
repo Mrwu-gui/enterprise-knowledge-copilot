@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>工作流配置中心 · 企业级 RAG SaaS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { colors: { primary: '#10b981', surface: '#f8fafc', line: '#e2e8f0', textMain: '#0f172a', textMuted: '#64748b' } } } };
+    </script>
+    <style>
+        body { font-family: "Inter", sans-serif; background: #f8fafc; }
+        .menu-btn { display: flex; align-items: center; padding: 12px 16px; border-radius: 8px; color: #64748b; font-weight: 600; transition: all 0.2s; }
+        .menu-btn:hover { background: #f1f5f9; color: #0f172a; }
+        .menu-btn.active { color: #10b981; background: #ecfdf5; }
+    </style>
+</head>
+<body class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white border-r border-line flex flex-col p-4">
+        <div class="px-2 py-6 font-black text-lg">SaaS Tenant</div>
+        <nav class="flex-1 space-y-2">
+            <a href="/tenant" class="menu-btn">问答测试</a>
+            <a href="/tenant/workflow" class="menu-btn active">工作流配置</a>
+        </nav>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 p-8 overflow-y-auto">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-2xl font-black text-textMain">工作流配置中心</h1>
+                <p class="text-sm text-textMuted mt-1">管理企业业务流程，编排 AI Agent 工作流</p>
+            </div>
+            <button class="bg-primary text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700">
+                <span class="material-symbols-outlined">add</span>新建工作流
+            </button>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-white border border-line rounded-2xl p-5 hover:border-emerald-500 transition-all cursor-pointer" onclick="location.href='/tenant/workflow/editor'">
+                <h3 class="font-bold text-lg mb-2">用户投诉自动化处理</h3>
+                <p class="text-sm text-textMuted mb-4">处理用户投诉的自动审核与智能回复流程</p>
+                <div class="flex justify-between text-xs font-bold text-slate-400">
+                    <span>V1.2 · 已发布</span>
+                    <span>10分钟前更新</span>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

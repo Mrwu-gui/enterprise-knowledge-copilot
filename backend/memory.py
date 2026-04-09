@@ -67,6 +67,7 @@ def build_short_term_memory(
     *,
     phone: str,
     tenant_id: str,
+    agent_id: str = "",
     session_id: str = "",
     app_settings: dict[str, Any] | None = None,
 ) -> str:
@@ -82,6 +83,7 @@ def build_short_term_memory(
     logs = list_recent_chat_pairs(
         phone=phone,
         tenant_id=tenant_id,
+        agent_id=agent_id,
         session_id=session_id,
         limit=config["max_turns"],
     )

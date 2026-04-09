@@ -1,0 +1,248 @@
+{
+  "default_workflow_id": "lt_http_callback_flow",
+  "items": [
+    {
+      "workflow_id": "lt_knowledge_router",
+      "name": "联通知识问答分流",
+      "description": "先查企业知识库，再根据命中情况分流到知识答复或通用兜底答复。",
+      "enabled": true,
+      "sort_order": 100,
+      "version": "V1.1",
+      "status": "published",
+      "updated_at": "2026-04-06 22:59:04",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户问题",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "知识库检索",
+            "description": "从联通知识库检索相关制度、公告和流程",
+            "query": "{{input.text}}",
+            "knowledgeBase": "默认知识库",
+            "topK": 5,
+            "threshold": 0.18
+          }
+        },
+        {
+          "id": "condition_1",
+          "type": "condition",
+          "x": 660,
+          "y": 180,
+          "data": {
+            "label": "判断是否命中知识",
+            "description": "有命中走知识答复，没有命中走通用兜底",
+            "condition": "len(last.hits) > 0"
+          }
+        },
+        {
+          "id": "ai_knowledge",
+          "type": "ai",
+          "x": 980,
+          "y": 80,
+          "data": {
+            "label": "知识答复",
+            "description": "基于检索结果生成企业口径答复",
+            "prompt": "你是中国联通知识助手。请基于用户问题和知识检索结果回答。用户问题：{{input.text}}\\n\\n知识片段：{{last.knowledge_text}}\\n\\n要求：1. 优先使用知识内容作答；2. 如果是流程类问题，按步骤输出；3. 如果是公告类问题，突出时间、范围、影响与处理要求；4. 只输出最终答复，不要解释推理过程。",
+            "model": "__default__",
+            "temperature": 0.3
+          }
+        },
+        {
+          "id": "ai_fallback",
+          "type": "ai",
+          "x": 980,
+          "y": 300,
+          "data": {
+            "label": "通用兜底答复",
+            "description": "知识不足时给出谨慎回复",
+            "prompt": "你是中国联通知识助手。当前企业知识库没有明显命中。请针对用户问题给出谨慎、自然的答复。用户问题：{{input.text}}\\n\\n要求：1. 明确说明当前知识库中没有足够依据；2. 如果问题属于通用常识，可给出简明帮助；3. 不要把通用信息表述为企业内部正式规定；4. 只输出最终答复。",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1290,
+          "y": 190,
+          "data": {
+            "label": "结束节点",
+            "description": "返回答复结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "condition_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "condition_1",
+          "to": "ai_knowledge",
+          "label": "true"
+        },
+        {
+          "id": "c4",
+          "from": "condition_1",
+          "to": "ai_fallback",
+          "label": "false"
+        },
+        {
+          "id": "c5",
+          "from": "ai_knowledge",
+          "to": "end_1",
+          "label": ""
+        },
+        {
+          "id": "c6",
+          "from": "ai_fallback",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "",
+        "chat_tagline": "",
+        "welcome_message": "",
+        "agent_description": "",
+        "recommended_questions": [],
+        "input_placeholder": "",
+        "send_button_text": ""
+      },
+      "system_prompt": "你是企业知识库的租户专属智能助理。\n\n请优先根据下方知识库内容回答；如果知识库没有明确答案，先说明知识不足，再给出谨慎建议。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "lt_http_callback_flow",
+      "name": "外部接口联动回调",
+      "description": "把当前问题或业务事件推送到外部 URL，并根据 HTTP 返回状态判断是否成功。",
+      "enabled": true,
+      "sort_order": 200,
+      "version": "V1.2",
+      "status": "published",
+      "updated_at": "2026-04-07 20:30:30",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收待推送内容",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "http_1",
+          "type": "http",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "调用外部 URL",
+            "description": "把当前测试文本推送到外部业务系统",
+            "url": "https://httpbin.org/post",
+            "method": "POST",
+            "headers": "{\"Content-Type\":\"application/json\"}",
+            "body": "{\"tenant\":\"中国联通RAG\",\"workflow\":\"外部接口联动回调\",\"text\":\"{{input.text}}\",\"source\":\"tenant_workflow_test\"}"
+          }
+        },
+        {
+          "id": "condition_1",
+          "type": "condition",
+          "x": 690,
+          "y": 180,
+          "data": {
+            "label": "判断外部接口结果",
+            "description": "HTTP 2xx 视为成功，否则视为失败",
+            "condition": "last.ok"
+          }
+        },
+        {
+          "id": "end_success",
+          "type": "end",
+          "x": 1000,
+          "y": 80,
+          "data": {
+            "label": "成功结束",
+            "description": "外部接口已成功接收",
+            "endType": "正常结束",
+            "endMessage": "外部接口调用成功，状态码 {{nodes.http_1.result.status}}，地址：{{nodes.http_1.result.url}}"
+          }
+        },
+        {
+          "id": "end_fail",
+          "type": "end",
+          "x": 1000,
+          "y": 300,
+          "data": {
+            "label": "失败结束",
+            "description": "外部接口调用失败",
+            "endType": "异常结束",
+            "endMessage": "外部接口调用失败，状态码 {{nodes.http_1.result.status}}，返回：{{nodes.http_1.result.body}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "http_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "http_1",
+          "to": "condition_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "condition_1",
+          "to": "end_success",
+          "label": "true"
+        },
+        {
+          "id": "c4",
+          "from": "condition_1",
+          "to": "end_fail",
+          "label": "false"
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "",
+        "chat_tagline": "",
+        "welcome_message": "",
+        "agent_description": "",
+        "recommended_questions": [],
+        "input_placeholder": "",
+        "send_button_text": ""
+      },
+      "system_prompt": "你是企业知识库的租户专属智能助理。\n\n请优先根据下方知识库内容回答；如果知识库没有明确答案，先说明知识不足，再给出谨慎建议。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    }
+  ],
+  "updated_at": 1775565030
+}

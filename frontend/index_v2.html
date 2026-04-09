@@ -295,6 +295,49 @@
       font-size: 14px;
     }
 
+    .agent-portal {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 12px 0 8px;
+    }
+
+    .agent-portal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .agent-portal-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, color-mix(in srgb, var(--primary-soft) 55%, white) 100%);
+      padding: 20px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .agent-portal-card:hover {
+      transform: translateY(-2px);
+      border-color: color-mix(in srgb, var(--primary) 38%, white);
+      box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+    }
+
+    .agent-portal-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-soft) 82%, white);
+      color: var(--primary-deep);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
     .message-row {
       display: flex;
       gap: 12px;
@@ -949,6 +992,19 @@
         </header>
 
         <main class="flex-1 flex flex-col relative min-h-0">
+          <div id="agent-switcher-bar" class="hidden border-b border-line bg-[color:var(--primary-soft)]/35 px-6 py-3">
+            <div class="max-w-2xl mx-auto flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
+              <div class="min-w-0">
+                <div class="text-[11px] font-black uppercase tracking-widest text-textMuted">当前智能体</div>
+                <div id="active-agent-summary" class="text-sm font-bold text-textMain truncate">未指定</div>
+              </div>
+              <div class="flex items-center gap-3">
+                <select id="agent-switcher-select" class="min-w-[220px] rounded-xl border border-line bg-white px-4 py-2 text-sm font-semibold text-textMain" onchange="switchAgentBySelect()">
+                  <option value="">默认智能体</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
             <div class="max-w-2xl mx-auto">
               <div class="bg-gray-50 rounded-xl p-4">
@@ -1003,24 +1059,17 @@
   </div>
 
   <script>
-    function getUUID() {
-      let uuid = localStorage.getItem('device_uuid');
-      if (!uuid) {
-        uuid = 'DEV-' + crypto.randomUUID();
-        localStorage.setItem('device_uuid', uuid);
-      }
-      return uuid;
-    }
-
     let authPassword = localStorage.getItem('auth_password') || '';
     let authPhone = localStorage.getItem('auth_phone') || '';
     let userBalance = 0;
-    const uuid = getUUID();
     let isStreaming = false;
     let currentChatLogo = '';
-    let currentSessionId = localStorage.getItem('chat_current_session_id') || '';
     let sessionList = [];
     let currentAppConfig = {};
+    let currentAgentId = new URLSearchParams(window.location.search).get('agent_id') || '';
+    let currentAgentMeta = null;
+    let availableAgents = [];
+    let currentSessionId = '';
     const initialWelcomeMarkup = document.getElementById('chat-messages').innerHTML;
 
     marked.setOptions({ breaks: true, gfm: true });
@@ -1235,7 +1284,10 @@
 
     async function loadAppConfig() {
       try {
-        const query = authPhone ? `?phone=${encodeURIComponent(authPhone)}` : '';
+        const params = new URLSearchParams();
+        if (authPhone) params.set('phone', authPhone);
+        if (currentAgentId) params.set('agent_id', currentAgentId);
+        const query = params.toString() ? `?${params.toString()}` : '';
         const res = await fetch(`/api/public/tenant-app-config${query}`);
         const data = await res.json();
         console.log('App config response:', data);
@@ -1244,6 +1296,7 @@
           return;
         }
         const cfg = data.config;
+        currentAgentMeta = data.agent || null;
         currentAppConfig = cfg || {};
         console.log('Loaded app config:', cfg);
         
@@ -1272,11 +1325,17 @@
 
     function persistCurrentSession(sessionId) {
       currentSessionId = String(sessionId || '').trim();
+      const storageKey = currentAgentId ? `chat_current_session_id::${currentAgentId}` : 'chat_current_session_id';
       if (currentSessionId) {
-        localStorage.setItem('chat_current_session_id', currentSessionId);
+        localStorage.setItem(storageKey, currentSessionId);
       } else {
-        localStorage.removeItem('chat_current_session_id');
+        localStorage.removeItem(storageKey);
       }
+    }
+
+    function hydrateCurrentSessionFromStorage() {
+      const storageKey = currentAgentId ? `chat_current_session_id::${currentAgentId}` : 'chat_current_session_id';
+      currentSessionId = localStorage.getItem(storageKey) || '';
     }
 
     function updateSessionSubtitle() {
@@ -1318,7 +1377,9 @@
       const root = document.getElementById('session-list');
       if (!root) return;
       if (!sessionList.length) {
-        root.innerHTML = '<div class="px-2 py-6 text-center text-[12px] text-textMuted">还没有历史会话</div>';
+        root.innerHTML = (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1)
+          ? '<div class="px-2 py-6 text-center text-[12px] text-textMuted">先选择一个智能体，再查看它的会话历史</div>'
+          : '<div class="px-2 py-6 text-center text-[12px] text-textMuted">还没有历史会话</div>';
         updateSessionSubtitle();
         return;
       }
@@ -1348,6 +1409,10 @@
       const root = document.getElementById('chat-messages');
       if (!root) return;
       if (!Array.isArray(messages) || !messages.length) {
+        if (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1) {
+          renderAgentPortal();
+          return;
+        }
         root.innerHTML = initialWelcomeMarkup;
         applyChatBranding(currentAppConfig || {});
         renderRecommendedQuestions((currentAppConfig || {}).recommended_questions || []);
@@ -1368,11 +1433,47 @@
       }
     }
 
+    function renderAgentPortal() {
+      const root = document.getElementById('chat-messages');
+      if (!root) return;
+      root.innerHTML = `
+        <div class="agent-portal">
+          <div class="empty-panel" style="max-width:100%;margin:0;border-radius:24px;background:linear-gradient(180deg,#ffffff 0%, color-mix(in srgb, var(--primary-soft) 28%, white) 100%);">
+            <div class="agent-portal-badge">
+              <span class="material-symbols-outlined text-[14px]">hub</span>
+              智能体中心
+            </div>
+            <h2 style="margin-top:16px;">请选择要进入的智能体</h2>
+            <p>同一机构下可以维护多个业务智能体。不同智能体可绑定不同知识范围、工作流和外部工具，更适合医院、政企和集团场景。</p>
+            <div class="agent-portal-grid">
+              ${availableAgents.map((agent) => `
+                <button type="button" class="agent-portal-card" onclick="switchAgentByCard('${escapeHtml(agent.agent_id || '')}')">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="text-lg font-black text-textMain truncate">${escapeHtml(agent.name || agent.agent_id || '未命名智能体')}</div>
+                      <div class="text-xs text-textMuted mt-1">${escapeHtml(agent.agent_id || '')}</div>
+                    </div>
+                    ${agent.is_default ? '<span class="agent-portal-badge">默认</span>' : ''}
+                  </div>
+                  <div class="text-sm text-textMuted leading-relaxed mt-4">${escapeHtml(agent.description || '进入该智能体后，将加载它对应的知识、工作流与欢迎语。')}</div>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     async function fetchSessionList() {
+      if (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1) {
+        sessionList = [];
+        renderSessionList();
+        return sessionList;
+      }
       const res = await fetch('/api/chat/sessions/list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: authPhone, password: authPassword, uuid })
+        body: JSON.stringify({ phone: authPhone, password: authPassword, agent_id: currentAgentId })
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.msg || '加载会话失败');
@@ -1381,11 +1482,99 @@
       return sessionList;
     }
 
+    function renderAgentSwitcher() {
+      const bar = document.getElementById('agent-switcher-bar');
+      const select = document.getElementById('agent-switcher-select');
+      const summary = document.getElementById('active-agent-summary');
+      if (!bar || !select || !summary) return;
+      if (!availableAgents.length) {
+        bar.classList.add('hidden');
+        return;
+      }
+      bar.classList.remove('hidden');
+      const baseOptions = (!currentAgentId && availableAgents.length > 1)
+        ? ['<option value="">请选择智能体</option>']
+        : [];
+      select.innerHTML = baseOptions.concat(availableAgents.map(item => (
+        `<option value="${escapeHtml(item.agent_id || '')}">${escapeHtml(item.name || item.agent_id || '未命名智能体')}${item.is_default ? '（默认）' : ''}</option>`
+      ))).join('');
+      if (currentAgentId && availableAgents.some(item => item.agent_id === currentAgentId)) {
+        select.value = currentAgentId;
+      } else if (currentAgentMeta?.agent_id && availableAgents.some(item => item.agent_id === currentAgentMeta.agent_id)) {
+        select.value = currentAgentMeta.agent_id;
+      } else if (!currentAgentId && availableAgents.length > 1) {
+        select.value = '';
+      }
+      const active = currentAgentId
+        ? (availableAgents.find(item => item.agent_id === (select.value || currentAgentId)) || currentAgentMeta || availableAgents[0])
+        : null;
+      if (active) {
+        summary.textContent = `${active.name || active.agent_id}${active.description ? ` · ${active.description}` : ''}`;
+      } else {
+        summary.textContent = '请选择一个智能体进入';
+      }
+    }
+
+    async function loadAvailableAgents() {
+      if (!authPhone || !authPassword) return;
+      try {
+        const res = await fetch('/api/chat/agents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: authPhone, password: authPassword, agent_id: currentAgentId })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) return;
+        availableAgents = Array.isArray(data.items) ? data.items : [];
+        if (data.active_agent?.agent_id) {
+          currentAgentMeta = data.active_agent;
+          if (!currentAgentId && availableAgents.length <= 1) {
+            currentAgentId = data.active_agent.agent_id;
+            const next = new URL(window.location.href);
+            next.searchParams.set('agent_id', currentAgentId);
+            history.replaceState(null, '', next.toString());
+          }
+        }
+        hydrateCurrentSessionFromStorage();
+        renderAgentSwitcher();
+      } catch (error) {
+        console.error('Failed to load agents:', error);
+      }
+    }
+
+    function switchAgentBySelect() {
+      const select = document.getElementById('agent-switcher-select');
+      const nextAgentId = String(select?.value || '').trim();
+      const next = new URL(window.location.href);
+      if (nextAgentId) {
+        next.searchParams.set('agent_id', nextAgentId);
+      } else {
+        next.searchParams.delete('agent_id');
+      }
+      next.pathname = '/chat';
+      window.location.href = next.toString();
+    }
+
+    function switchAgentByCard(agentId) {
+      const next = new URL(window.location.href);
+      if (agentId) {
+        next.searchParams.set('agent_id', agentId);
+      } else {
+        next.searchParams.delete('agent_id');
+      }
+      next.pathname = '/chat';
+      window.location.href = next.toString();
+    }
+
     async function createNewSession(title = '新对话') {
+      if (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1) {
+        await showModal({ title: '请选择智能体', body: '请先从上方智能体列表中选择一个业务智能体，再开始新对话。', okOnly: true });
+        return null;
+      }
       const res = await fetch('/api/chat/sessions/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: authPhone, password: authPassword, uuid, title })
+        body: JSON.stringify({ phone: authPhone, password: authPassword, title, agent_id: currentAgentId })
       });
       const data = await res.json();
       if (!res.ok || !data.ok || !data.session) throw new Error(data.msg || '创建会话失败');
@@ -1396,7 +1585,7 @@
       const res = await fetch('/api/chat/sessions/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: authPhone, password: authPassword, uuid, session_id: sessionId })
+        body: JSON.stringify({ phone: authPhone, password: authPassword, session_id: sessionId, agent_id: currentAgentId })
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.msg || '加载会话消息失败');
@@ -1415,12 +1604,16 @@
 
     async function startNewChat() {
       if (isStreaming) return;
+      if (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1) {
+        renderAgentPortal();
+        return;
+      }
       try {
         if (currentSessionId) {
           const currentMessages = await fetch('/api/chat/sessions/messages', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: authPhone, password: authPassword, uuid, session_id: currentSessionId })
+            body: JSON.stringify({ phone: authPhone, password: authPassword, session_id: currentSessionId, agent_id: currentAgentId })
           }).then(r => r.json()).catch(() => ({ ok: false }));
           if (currentMessages.ok && Array.isArray(currentMessages.messages) && currentMessages.messages.length === 0) {
             renderChatMessagesFromSession([]);
@@ -1429,6 +1622,7 @@
           }
         }
         const session = await createNewSession('新对话');
+        if (!session) return;
         persistCurrentSession(session.session_id || '');
         await fetchSessionList();
         renderChatMessagesFromSession([]);
@@ -1444,7 +1638,7 @@
       localStorage.removeItem('chat_current_session_id');
       authPassword = '';
       authPhone = '';
-      window.location.href = '/login';
+      window.location.href = currentAgentId ? `/login?agent_id=${encodeURIComponent(currentAgentId)}` : '/login';
     }
 
     function toggleSidebar() {
@@ -1529,6 +1723,11 @@
 
     async function sendMessage() {
       if (isStreaming) return;
+      if (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1) {
+        renderAgentPortal();
+        await showModal({ title: '请选择智能体', body: '请先选择要进入的智能体，再开始提问。', okOnly: true });
+        return;
+      }
       const input = document.getElementById('chat-input');
       const question = input.value.trim();
       if (!question) return;
@@ -1555,7 +1754,7 @@
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: authPassword, phone: authPhone, uuid, question, session_id: currentSessionId })
+          body: JSON.stringify({ password: authPassword, phone: authPhone, question, session_id: currentSessionId, agent_id: currentAgentId })
         });
 
         if (res.status === 403) {
@@ -1650,20 +1849,26 @@
     }
 
     (async function init() {
+      hydrateCurrentSessionFromStorage();
       await loadAppConfig();
       if (!authPassword || !authPhone) {
-        window.location.href = '/login';
+        window.location.href = currentAgentId ? `/login?agent_id=${encodeURIComponent(currentAgentId)}` : '/login';
         return;
       }
       fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: authPassword, phone: authPhone, uuid })
+        body: JSON.stringify({ password: authPassword, phone: authPhone })
       }).then(async (r) => r.json()).then(async (data) => {
         if (data.ok) {
+          await loadAvailableAgents();
           await fetchSessionList();
           const currentExists = sessionList.some(item => item.session_id === currentSessionId);
-          if (currentSessionId && currentExists) {
+          if (!currentAgentId && Array.isArray(availableAgents) && availableAgents.length > 1) {
+            persistCurrentSession('');
+            renderSessionList();
+            renderAgentPortal();
+          } else if (currentSessionId && currentExists) {
             await openSession(currentSessionId);
           } else if (sessionList.length) {
             await openSession(sessionList[0].session_id);
@@ -1679,10 +1884,10 @@
           localStorage.removeItem('chat_current_session_id');
           authPassword = '';
           authPhone = '';
-          window.location.href = '/login';
+          window.location.href = currentAgentId ? `/login?agent_id=${encodeURIComponent(currentAgentId)}` : '/login';
         }
       }).catch(() => {
-        window.location.href = '/login';
+        window.location.href = currentAgentId ? `/login?agent_id=${encodeURIComponent(currentAgentId)}` : '/login';
       });
     })();
   </script>

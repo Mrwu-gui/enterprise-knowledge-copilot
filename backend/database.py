@@ -19,6 +19,18 @@ def get_conn():
     return conn
 
 
+def _with_schema_retry(write_op):
+    """Retry once after initializing schema when an observability table is missing."""
+    try:
+        return write_op()
+    except sqlite3.OperationalError as exc:
+        message = str(exc).lower()
+        if "no such table" not in message:
+            raise
+        init_db()
+        return write_op()
+
+
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
@@ -117,10 +129,58 @@ def init_db():
             )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS agents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            status TEXT DEFAULT 'draft',
+            enabled INTEGER DEFAULT 1,
+            avatar TEXT DEFAULT '',
+            welcome_message TEXT DEFAULT '',
+            input_placeholder TEXT DEFAULT '',
+            recommended_questions TEXT DEFAULT '[]',
+            prompt_override TEXT DEFAULT '',
+            workflow_id TEXT DEFAULT '',
+            knowledge_scope TEXT DEFAULT '{}',
+            model_override TEXT DEFAULT '{}',
+            tool_scope TEXT DEFAULT '[]',
+            mcp_servers TEXT DEFAULT '[]',
+            is_default INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, agent_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_user_bindings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, agent_id, phone)
+        )
+        """
+    )
+    for col, definition in [
+        ("tool_scope", "TEXT DEFAULT '[]'"),
+        ("mcp_servers", "TEXT DEFAULT '[]'"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {definition}")
+        except sqlite3.OperationalError:
+            pass
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS chat_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT UNIQUE NOT NULL,
             tenant_id TEXT DEFAULT 'default',
+            agent_id TEXT DEFAULT '',
             phone TEXT NOT NULL,
             title TEXT DEFAULT '新对话',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -132,6 +192,10 @@ def init_db():
         conn.execute("ALTER TABLE chat_sessions ADD COLUMN tenant_id TEXT DEFAULT 'default'")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE chat_sessions ADD COLUMN agent_id TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS chat_logs (
@@ -139,6 +203,7 @@ def init_db():
             request_id TEXT DEFAULT '',
             session_id TEXT DEFAULT '',
             tenant_id TEXT DEFAULT 'default',
+            agent_id TEXT DEFAULT '',
             phone TEXT NOT NULL,
             question TEXT NOT NULL,
             answer TEXT NOT NULL,
@@ -158,6 +223,10 @@ def init_db():
         pass
     try:
         conn.execute("ALTER TABLE chat_logs ADD COLUMN tenant_id TEXT DEFAULT 'default'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE chat_logs ADD COLUMN agent_id TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
     try:
@@ -356,6 +425,304 @@ def list_tenant_phone_accounts(tenant_id: str, page: int = 1, per_page: int = 50
     return items, total
 
 
+def _row_to_agent(row: sqlite3.Row | None) -> dict | None:
+    if not row:
+        return None
+    item = dict(row)
+    for key, fallback in [
+        ("recommended_questions", []),
+        ("knowledge_scope", {}),
+        ("model_override", {}),
+        ("tool_scope", []),
+        ("mcp_servers", []),
+    ]:
+        try:
+            item[key] = json.loads(item.get(key) or json.dumps(fallback, ensure_ascii=False))
+        except Exception:
+            item[key] = fallback
+    if isinstance(item.get("model_override"), dict):
+        item["model"] = str(item["model_override"].get("model") or "").strip()
+    else:
+        item["model"] = ""
+    item["enabled"] = bool(item.get("enabled", 1))
+    item["is_default"] = bool(item.get("is_default", 0))
+    return item
+
+
+def list_agents(tenant_id: str, include_disabled: bool = True) -> list[dict]:
+    conn = get_conn()
+    sql = """
+        SELECT tenant_id, agent_id, name, description, status, enabled, avatar,
+               welcome_message, input_placeholder, recommended_questions,
+               prompt_override, workflow_id, knowledge_scope, model_override,
+               tool_scope, mcp_servers,
+               is_default, created_at, updated_at
+        FROM agents
+        WHERE tenant_id = ?
+    """
+    params: list = [tenant_id]
+    if not include_disabled:
+        sql += " AND enabled = 1"
+    sql += " ORDER BY is_default DESC, datetime(updated_at) DESC, id DESC"
+    rows = conn.execute(sql, tuple(params)).fetchall()
+    conn.close()
+    return [_row_to_agent(row) for row in rows if row]
+
+
+def get_agent(tenant_id: str, agent_id: str) -> dict | None:
+    conn = get_conn()
+    row = conn.execute(
+        """
+        SELECT tenant_id, agent_id, name, description, status, enabled, avatar,
+               welcome_message, input_placeholder, recommended_questions,
+               prompt_override, workflow_id, knowledge_scope, model_override,
+               tool_scope, mcp_servers,
+               is_default, created_at, updated_at
+        FROM agents
+        WHERE tenant_id = ? AND agent_id = ?
+        """,
+        (tenant_id, agent_id),
+    ).fetchone()
+    conn.close()
+    return _row_to_agent(row)
+
+
+def save_agent(
+    *,
+    tenant_id: str,
+    agent_id: str = "",
+    name: str,
+    description: str = "",
+    status: str = "draft",
+    enabled: bool = True,
+    avatar: str = "",
+    welcome_message: str = "",
+    input_placeholder: str = "",
+    recommended_questions: list[str] | None = None,
+    prompt_override: str = "",
+    workflow_id: str = "",
+    knowledge_scope: dict | list | None = None,
+    model_override: dict | None = None,
+    tool_scope: list[str] | None = None,
+    mcp_servers: list[str] | None = None,
+    is_default: bool = False,
+) -> dict:
+    clean_name = str(name or "").strip()
+    if not clean_name:
+        raise ValueError("智能体名称不能为空")
+    clean_agent_id = str(agent_id or "").strip() or f"agent_{secrets.token_hex(6)}"
+    clean_status = "published" if str(status or "").strip() == "published" else "draft"
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT id FROM agents WHERE tenant_id = ? AND agent_id = ?",
+        (tenant_id, clean_agent_id),
+    ).fetchone()
+    if is_default:
+        conn.execute("UPDATE agents SET is_default = 0 WHERE tenant_id = ?", (tenant_id,))
+    payload = (
+        tenant_id,
+        clean_agent_id,
+        clean_name,
+        str(description or "").strip(),
+        clean_status,
+        1 if enabled else 0,
+        str(avatar or "").strip(),
+        str(welcome_message or "").strip(),
+        str(input_placeholder or "").strip(),
+        json.dumps(recommended_questions or [], ensure_ascii=False),
+        str(prompt_override or ""),
+        str(workflow_id or "").strip(),
+        json.dumps(knowledge_scope or {}, ensure_ascii=False),
+        json.dumps(model_override or {}, ensure_ascii=False),
+        json.dumps(tool_scope or [], ensure_ascii=False),
+        json.dumps(mcp_servers or [], ensure_ascii=False),
+        1 if is_default else 0,
+    )
+    if existing:
+        conn.execute(
+            """
+            UPDATE agents
+            SET name = ?, description = ?, status = ?, enabled = ?, avatar = ?,
+                welcome_message = ?, input_placeholder = ?, recommended_questions = ?,
+                prompt_override = ?, workflow_id = ?, knowledge_scope = ?,
+                model_override = ?, tool_scope = ?, mcp_servers = ?,
+                is_default = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE tenant_id = ? AND agent_id = ?
+            """,
+            (
+                clean_name,
+                str(description or "").strip(),
+                clean_status,
+                1 if enabled else 0,
+                str(avatar or "").strip(),
+                str(welcome_message or "").strip(),
+                str(input_placeholder or "").strip(),
+                json.dumps(recommended_questions or [], ensure_ascii=False),
+                str(prompt_override or ""),
+                str(workflow_id or "").strip(),
+                json.dumps(knowledge_scope or {}, ensure_ascii=False),
+                json.dumps(model_override or {}, ensure_ascii=False),
+                json.dumps(tool_scope or [], ensure_ascii=False),
+                json.dumps(mcp_servers or [], ensure_ascii=False),
+                1 if is_default else 0,
+                tenant_id,
+                clean_agent_id,
+            ),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO agents (
+                tenant_id, agent_id, name, description, status, enabled, avatar,
+                welcome_message, input_placeholder, recommended_questions,
+                prompt_override, workflow_id, knowledge_scope, model_override,
+                tool_scope, mcp_servers, is_default
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            payload,
+        )
+    conn.commit()
+    conn.close()
+    return get_agent(tenant_id, clean_agent_id) or {}
+
+
+def toggle_agent(*, tenant_id: str, agent_id: str, enabled: bool) -> dict:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id FROM agents WHERE tenant_id = ? AND agent_id = ?",
+        (tenant_id, agent_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return {"ok": False, "msg": "智能体不存在"}
+    conn.execute(
+        "UPDATE agents SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND agent_id = ?",
+        (1 if enabled else 0, tenant_id, agent_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "msg": f"已{'启用' if enabled else '停用'}智能体"}
+
+
+def delete_agent(*, tenant_id: str, agent_id: str) -> dict:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT is_default FROM agents WHERE tenant_id = ? AND agent_id = ?",
+        (tenant_id, agent_id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return {"ok": False, "msg": "智能体不存在"}
+    conn.execute(
+        "DELETE FROM agent_user_bindings WHERE tenant_id = ? AND agent_id = ?",
+        (tenant_id, agent_id),
+    )
+    conn.execute(
+        "DELETE FROM agents WHERE tenant_id = ? AND agent_id = ?",
+        (tenant_id, agent_id),
+    )
+    if bool(row["is_default"]):
+        next_row = conn.execute(
+            """
+            SELECT agent_id
+            FROM agents
+            WHERE tenant_id = ? AND enabled = 1
+            ORDER BY datetime(updated_at) DESC, id DESC
+            LIMIT 1
+            """,
+            (tenant_id,),
+        ).fetchone()
+        if next_row:
+            conn.execute(
+                "UPDATE agents SET is_default = 1, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND agent_id = ?",
+                (tenant_id, str(next_row["agent_id"] or "").strip()),
+            )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "msg": "智能体已删除"}
+
+
+def list_user_agent_bindings(*, tenant_id: str, phone: str) -> list[str]:
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT agent_id
+        FROM agent_user_bindings
+        WHERE tenant_id = ? AND phone = ?
+        ORDER BY id ASC
+        """,
+        (tenant_id, phone),
+    ).fetchall()
+    conn.close()
+    return [str(row["agent_id"] or "").strip() for row in rows if str(row["agent_id"] or "").strip()]
+
+
+def save_user_agent_bindings(*, tenant_id: str, phone: str, agent_ids: list[str]) -> dict:
+    clean_agent_ids = []
+    seen: set[str] = set()
+    for item in agent_ids or []:
+        agent_id = str(item or "").strip()
+        if not agent_id or agent_id in seen:
+            continue
+        clean_agent_ids.append(agent_id)
+        seen.add(agent_id)
+    conn = get_conn()
+    account = conn.execute(
+        "SELECT id FROM phone_accounts WHERE tenant_id = ? AND phone = ?",
+        (tenant_id, phone),
+    ).fetchone()
+    if not account:
+        conn.close()
+        return {"ok": False, "msg": "成员账号不存在"}
+    if clean_agent_ids:
+        placeholders = ",".join("?" for _ in clean_agent_ids)
+        valid_rows = conn.execute(
+            f"SELECT agent_id FROM agents WHERE tenant_id = ? AND agent_id IN ({placeholders})",
+            (tenant_id, *clean_agent_ids),
+        ).fetchall()
+        valid_ids = {str(row["agent_id"] or "").strip() for row in valid_rows}
+        missing = [item for item in clean_agent_ids if item not in valid_ids]
+        if missing:
+            conn.close()
+            return {"ok": False, "msg": f"智能体不存在: {', '.join(missing)}"}
+    conn.execute(
+        "DELETE FROM agent_user_bindings WHERE tenant_id = ? AND phone = ?",
+        (tenant_id, phone),
+    )
+    for agent_id in clean_agent_ids:
+        conn.execute(
+            """
+            INSERT INTO agent_user_bindings (tenant_id, agent_id, phone)
+            VALUES (?, ?, ?)
+            """,
+            (tenant_id, agent_id, phone),
+        )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "msg": "账号智能体绑定已更新", "agent_ids": clean_agent_ids}
+
+
+def get_default_agent(tenant_id: str) -> dict | None:
+    conn = get_conn()
+    row = conn.execute(
+        """
+        SELECT tenant_id, agent_id, name, description, status, enabled, avatar,
+               welcome_message, input_placeholder, recommended_questions,
+               prompt_override, workflow_id, knowledge_scope, model_override,
+               tool_scope, mcp_servers,
+               is_default, created_at, updated_at
+        FROM agents
+        WHERE tenant_id = ? AND enabled = 1
+        ORDER BY is_default DESC, datetime(updated_at) DESC, id DESC
+        LIMIT 1
+        """,
+        (tenant_id,),
+    ).fetchone()
+    conn.close()
+    return _row_to_agent(row)
+
+
 def toggle_tenant_phone_account(*, tenant_id: str, phone: str, enabled: bool) -> dict:
     conn = get_conn()
     row = conn.execute(
@@ -392,7 +759,7 @@ def generate_temp_password(phone: str, length: int = 10) -> dict:
     return {"ok": True, "phone": phone, "password": password, "msg": f"已为 {phone} 生成临时密码"}
 
 
-def verify_phone_login(phone: str, password: str, uuid: str) -> dict:
+def verify_phone_login(phone: str, password: str, uuid: str = "") -> dict:
     conn = get_conn()
     row = conn.execute(
         "SELECT * FROM phone_accounts WHERE phone = ? AND enabled = 1",
@@ -411,34 +778,12 @@ def verify_phone_login(phone: str, password: str, uuid: str) -> dict:
         return {"ok": False, "code": 403, "msg": "手机号或密码错误"}
 
     balance = row["balance"] or 0
-    device_a = row["device_a"]
-    device_b = row["device_b"]
     must_change = bool(row["must_change_password"])
     display_name = str(row["display_name"] or "").strip()
-
-    if not device_a:
-        conn.execute("UPDATE phone_accounts SET device_a = ?, last_login = CURRENT_TIMESTAMP WHERE phone = ?", (uuid, phone))
-        conn.commit()
-        conn.close()
-        return {"ok": True, "msg": "设备A已绑定", "balance": balance, "must_change_password": must_change, "display_name": display_name}
-    if device_a == uuid:
-        conn.execute("UPDATE phone_accounts SET last_login = CURRENT_TIMESTAMP WHERE phone = ?", (phone,))
-        conn.commit()
-        conn.close()
-        return {"ok": True, "msg": "设备A验证通过", "balance": balance, "must_change_password": must_change, "display_name": display_name}
-    if not device_b:
-        conn.execute("UPDATE phone_accounts SET device_b = ?, last_login = CURRENT_TIMESTAMP WHERE phone = ?", (uuid, phone))
-        conn.commit()
-        conn.close()
-        return {"ok": True, "msg": "设备B已绑定", "balance": balance, "must_change_password": must_change, "display_name": display_name}
-    if device_b == uuid:
-        conn.execute("UPDATE phone_accounts SET last_login = CURRENT_TIMESTAMP WHERE phone = ?", (phone,))
-        conn.commit()
-        conn.close()
-        return {"ok": True, "msg": "设备B验证通过", "balance": balance, "must_change_password": must_change, "display_name": display_name}
-
+    conn.execute("UPDATE phone_accounts SET last_login = CURRENT_TIMESTAMP WHERE phone = ?", (phone,))
+    conn.commit()
     conn.close()
-    return {"ok": False, "code": 403, "msg": "设备数量已达上限（最多绑定2台设备），请联系客服重置"}
+    return {"ok": True, "msg": "登录成功", "balance": balance, "must_change_password": must_change, "display_name": display_name}
 
 
 def change_password(phone: str, old_password: str, new_password: str) -> dict:
@@ -533,7 +878,7 @@ def _normalize_session_title(title: str, fallback: str = "新对话") -> str:
     return clean[:40]
 
 
-def create_chat_session(*, phone: str, tenant_id: str = "default", title: str = "新对话") -> dict:
+def create_chat_session(*, phone: str, tenant_id: str = "default", agent_id: str = "", title: str = "新对话") -> dict:
     """创建一个新的会话分组，用于把多轮消息串成一条独立对话。"""
     phone = str(phone or "").strip()
     tenant_id = str(tenant_id or "default").strip() or "default"
@@ -544,15 +889,15 @@ def create_chat_session(*, phone: str, tenant_id: str = "default", title: str = 
     conn = get_conn()
     conn.execute(
         """
-        INSERT INTO chat_sessions (session_id, tenant_id, phone, title)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO chat_sessions (session_id, tenant_id, agent_id, phone, title)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        (session_id, tenant_id, phone, clean_title),
+        (session_id, tenant_id, str(agent_id or "").strip(), phone, clean_title),
     )
     conn.commit()
     row = conn.execute(
         """
-        SELECT session_id, tenant_id, phone, title, created_at, updated_at
+        SELECT session_id, tenant_id, agent_id, phone, title, created_at, updated_at
         FROM chat_sessions
         WHERE session_id = ?
         """,
@@ -567,6 +912,7 @@ def touch_chat_session(
     session_id: str,
     phone: str,
     tenant_id: str = "default",
+    agent_id: str = "",
     title_hint: str = "",
 ) -> None:
     """刷新会话更新时间，并在首问时用问题生成标题。"""
@@ -580,9 +926,9 @@ def touch_chat_session(
         """
         SELECT title
         FROM chat_sessions
-        WHERE session_id = ? AND tenant_id = ? AND phone = ?
+        WHERE session_id = ? AND tenant_id = ? AND phone = ? AND agent_id = ?
         """,
-        (session_id, tenant_id, phone),
+        (session_id, tenant_id, phone, str(agent_id or "").strip()),
     ).fetchone()
     if not row:
         conn.close()
@@ -595,31 +941,43 @@ def touch_chat_session(
         """
         UPDATE chat_sessions
         SET title = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = ? AND tenant_id = ? AND phone = ?
+        WHERE session_id = ? AND tenant_id = ? AND phone = ? AND agent_id = ?
         """,
-        (next_title or "新对话", session_id, tenant_id, phone),
+        (next_title or "新对话", session_id, tenant_id, phone, str(agent_id or "").strip()),
     )
     conn.commit()
     conn.close()
 
 
-def list_chat_sessions(*, phone: str, tenant_id: str = "default", limit: int = 50) -> list[dict]:
+def list_chat_sessions(*, phone: str, tenant_id: str = "default", agent_id: str | None = None, limit: int = 50) -> list[dict]:
     """列出某个用户的会话列表，按最近活跃时间倒序。"""
     phone = str(phone or "").strip()
     tenant_id = str(tenant_id or "default").strip() or "default"
     if not phone:
         return []
     conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT session_id, tenant_id, phone, title, created_at, updated_at
-        FROM chat_sessions
-        WHERE tenant_id = ? AND phone = ?
-        ORDER BY datetime(updated_at) DESC, id DESC
-        LIMIT ?
-        """,
-        (tenant_id, phone, max(1, int(limit or 1))),
-    ).fetchall()
+    if agent_id is None:
+        rows = conn.execute(
+            """
+            SELECT session_id, tenant_id, agent_id, phone, title, created_at, updated_at
+            FROM chat_sessions
+            WHERE tenant_id = ? AND phone = ?
+            ORDER BY datetime(updated_at) DESC, id DESC
+            LIMIT ?
+            """,
+            (tenant_id, phone, max(1, int(limit or 1))),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT session_id, tenant_id, agent_id, phone, title, created_at, updated_at
+            FROM chat_sessions
+            WHERE tenant_id = ? AND phone = ? AND agent_id = ?
+            ORDER BY datetime(updated_at) DESC, id DESC
+            LIMIT ?
+            """,
+            (tenant_id, phone, str(agent_id or "").strip(), max(1, int(limit or 1))),
+        ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
@@ -667,6 +1025,7 @@ def list_chat_session_messages(
     session_id: str,
     phone: str,
     tenant_id: str = "default",
+    agent_id: str | None = None,
     limit: int = 200,
 ) -> list[dict]:
     """读取某个会话下的完整问答消息。"""
@@ -676,16 +1035,28 @@ def list_chat_session_messages(
     if not session_id or not phone:
         return []
     conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT id, request_id, session_id, question, answer, knowledge_hits, retrieval_trace, created_at
-        FROM chat_logs
-        WHERE tenant_id = ? AND phone = ? AND session_id = ?
-        ORDER BY id ASC
-        LIMIT ?
-        """,
-        (tenant_id, phone, session_id, max(1, int(limit or 1))),
-    ).fetchall()
+    if agent_id is None:
+        rows = conn.execute(
+            """
+            SELECT id, request_id, session_id, tenant_id, agent_id, question, answer, knowledge_hits, retrieval_trace, created_at
+            FROM chat_logs
+            WHERE tenant_id = ? AND phone = ? AND session_id = ?
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (tenant_id, phone, session_id, max(1, int(limit or 1))),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, request_id, session_id, tenant_id, agent_id, question, answer, knowledge_hits, retrieval_trace, created_at
+            FROM chat_logs
+            WHERE tenant_id = ? AND phone = ? AND session_id = ? AND agent_id = ?
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (tenant_id, phone, session_id, str(agent_id or "").strip(), max(1, int(limit or 1))),
+        ).fetchall()
     conn.close()
     result: list[dict] = []
     for row in rows:
@@ -721,6 +1092,7 @@ def record_chat_log(
     knowledge_hits: list[dict] | None = None,
     retrieval_trace: dict | None = None,
     tenant_id: str = "default",
+    agent_id: str = "",
     request_id: str = "",
     session_id: str = "",
 ) -> None:
@@ -728,13 +1100,14 @@ def record_chat_log(
     conn = get_conn()
     conn.execute(
         """
-        INSERT INTO chat_logs (request_id, session_id, tenant_id, phone, question, answer, knowledge_hits, retrieval_trace)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO chat_logs (request_id, session_id, tenant_id, agent_id, phone, question, answer, knowledge_hits, retrieval_trace)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             request_id,
             session_id,
             tenant_id,
+            str(agent_id or "").strip(),
             phone,
             question,
             answer,
@@ -749,11 +1122,18 @@ def record_chat_log(
             session_id=session_id,
             phone=phone,
             tenant_id=tenant_id,
+            agent_id=agent_id,
             title_hint=question,
         )
 
 
-def list_chat_logs(page: int = 1, per_page: int = 20, phone: str = "", tenant_id: str | None = None):
+def list_chat_logs(
+    page: int = 1,
+    per_page: int = 20,
+    phone: str = "",
+    tenant_id: str | None = None,
+    agent_id: str | None = None,
+):
     """分页查询聊天日志，可按租户与手机号过滤。"""
     conn = get_conn()
     offset = (max(page, 1) - 1) * per_page
@@ -763,6 +1143,9 @@ def list_chat_logs(page: int = 1, per_page: int = 20, phone: str = "", tenant_id
     if tenant_id:
         where_parts.append("tenant_id = ?")
         params.append(tenant_id)
+    if agent_id is not None:
+        where_parts.append("agent_id = ?")
+        params.append(str(agent_id or "").strip())
     if phone:
         where_parts.append("phone LIKE ?")
         params.append(f"%{phone}%")
@@ -770,7 +1153,7 @@ def list_chat_logs(page: int = 1, per_page: int = 20, phone: str = "", tenant_id
     if where_sql:
         rows = conn.execute(
             """
-            SELECT id, request_id, session_id, tenant_id, phone, question, answer, knowledge_hits, retrieval_trace, created_at
+            SELECT id, request_id, session_id, tenant_id, agent_id, phone, question, answer, knowledge_hits, retrieval_trace, created_at
             FROM chat_logs
             """ + where_sql + """
             ORDER BY id DESC
@@ -785,7 +1168,7 @@ def list_chat_logs(page: int = 1, per_page: int = 20, phone: str = "", tenant_id
     else:
         rows = conn.execute(
             """
-            SELECT id, request_id, session_id, tenant_id, phone, question, answer, knowledge_hits, retrieval_trace, created_at
+            SELECT id, request_id, session_id, tenant_id, agent_id, phone, question, answer, knowledge_hits, retrieval_trace, created_at
             FROM chat_logs
             ORDER BY id DESC
             LIMIT ? OFFSET ?
@@ -813,6 +1196,7 @@ def list_recent_chat_pairs(
     *,
     phone: str,
     tenant_id: str = "default",
+    agent_id: str | None = None,
     session_id: str = "",
     limit: int = 6,
 ) -> list[dict]:
@@ -826,7 +1210,7 @@ def list_recent_chat_pairs(
     if not phone:
         return []
     conn = get_conn()
-    if session_id:
+    if session_id and agent_id is None:
         rows = conn.execute(
             """
             SELECT question, answer, created_at
@@ -837,7 +1221,18 @@ def list_recent_chat_pairs(
             """,
             (tenant_id, phone, session_id, max(1, int(limit or 1))),
         ).fetchall()
-    else:
+    elif session_id:
+        rows = conn.execute(
+            """
+            SELECT question, answer, created_at
+            FROM chat_logs
+            WHERE tenant_id = ? AND phone = ? AND session_id = ? AND agent_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (tenant_id, phone, session_id, str(agent_id or "").strip(), max(1, int(limit or 1))),
+        ).fetchall()
+    elif agent_id is None:
         rows = conn.execute(
             """
             SELECT question, answer, created_at
@@ -847,6 +1242,17 @@ def list_recent_chat_pairs(
             LIMIT ?
             """,
             (tenant_id, phone, max(1, int(limit or 1))),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT question, answer, created_at
+            FROM chat_logs
+            WHERE tenant_id = ? AND phone = ? AND agent_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (tenant_id, phone, str(agent_id or "").strip(), max(1, int(limit or 1))),
         ).fetchall()
     conn.close()
     result = []
@@ -875,30 +1281,35 @@ def record_request_log(
     tenant_id: str = "default",
 ) -> None:
     """写入请求日志，支持租户维度观测。"""
-    conn = get_conn()
-    conn.execute(
-        """
-        INSERT INTO request_logs (
-            request_id, tenant_id, path, method, status_code, duration_ms, client_ip, phone,
-            cache_status, model_name, error_message
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            request_id,
-            tenant_id,
-            path,
-            method,
-            status_code,
-            duration_ms,
-            client_ip,
-            phone,
-            cache_status,
-            model_name,
-            error_message,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    def _write():
+        conn = get_conn()
+        try:
+            conn.execute(
+                """
+                INSERT INTO request_logs (
+                    request_id, tenant_id, path, method, status_code, duration_ms, client_ip, phone,
+                    cache_status, model_name, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    request_id,
+                    tenant_id,
+                    path,
+                    method,
+                    status_code,
+                    duration_ms,
+                    client_ip,
+                    phone,
+                    cache_status,
+                    model_name,
+                    error_message,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    _with_schema_retry(_write)
 
 
 def record_guardrail_event(
@@ -911,16 +1322,21 @@ def record_guardrail_event(
     tenant_id: str = "default",
 ) -> None:
     """记录护栏事件，支持租户维度隔离。"""
-    conn = get_conn()
-    conn.execute(
-        """
-        INSERT INTO guardrail_events (request_id, tenant_id, phone, stage, action, rule_name, detail)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (request_id, tenant_id, phone, stage, action, rule_name, detail),
-    )
-    conn.commit()
-    conn.close()
+    def _write():
+        conn = get_conn()
+        try:
+            conn.execute(
+                """
+                INSERT INTO guardrail_events (request_id, tenant_id, phone, stage, action, rule_name, detail)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (request_id, tenant_id, phone, stage, action, rule_name, detail),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    _with_schema_retry(_write)
 
 
 def get_observability_summary(tenant_id: str | None = None) -> dict:

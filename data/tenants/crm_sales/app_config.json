@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "crm_sales",
+  "app_name": "联想中国销售运营中心",
+  "app_subtitle": "KA 客户跟进、商机判断与季度复盘平台",
+  "chat_title": "联想销售作战室",
+  "chat_tagline": "围绕客户阶段、采购意向和报价策略，生成下一步跟进建议。",
+  "welcome_message": "你好，我是联想销售作战室。你可以让我查询销售政策、梳理客户阶段、生成跟进建议或产出周报复盘。",
+  "agent_description": "面向 ToB 销售与大客户运营场景的智能销售助手，负责客户机会识别、跟进节奏提醒与销售复盘。",
+  "logo": "https://www.google.com/s2/favicons?domain=lenovo.com&sz=128",
+  "recommended_questions": [
+    "客户华东智造这周应该推进到哪个销售阶段？",
+    "帮我整理一份重点客户季度复盘提纲。",
+    "报价超过 50 万时联想内部审批怎么走？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "联想销售中台登录 · 建议先确认客户阶段、机会评分和审批政策",
+  "input_placeholder": "输入客户名称、商机阶段、最新需求或需要复盘的跟进记录...",
+  "send_button_text": "生成跟进方案",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "crm_sales",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#fff6f6",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#f1d5d6",
+    "text": "#4f1f24",
+    "muted": "#8e6368",
+    "accent": "#d92d38",
+    "accent_strong": "#b31f29",
+    "accent_soft": "rgba(217, 45, 56, 0.12)",
+    "danger": "#c9363f",
+    "primary": "#d92d38",
+    "primary_deep": "#b31f29",
+    "primary_soft": "rgba(217, 45, 56, 0.12)"
+  }
+}

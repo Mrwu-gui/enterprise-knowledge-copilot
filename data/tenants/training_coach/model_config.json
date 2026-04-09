@@ -1,0 +1,20 @@
+{
+  "providers": [
+    {
+      "id": "provider_1",
+      "label": "千问",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model_primary": "qwen-max",
+      "model_fallback": "",
+      "api_keys": [
+        "sk-eede896e40f24897aaa624d78d011ad6",
+        "sk-3c05e62cd1d4407bb7cd9202fb889344",
+        "sk-c19ba83b84ec4c50b3d92b01bdc3a8a7",
+        "sk-1a14d4a4e03a426199eab9a33eb77de0"
+      ]
+    }
+  ],
+  "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "model_primary": "qwen-max",
+  "model_fallback": ""
+}

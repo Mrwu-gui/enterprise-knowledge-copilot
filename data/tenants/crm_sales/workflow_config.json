@@ -1,0 +1,140 @@
+{
+  "default_workflow_id": "lenovo_sales_router",
+  "items": [
+    {
+      "workflow_id": "lenovo_sales_router",
+      "name": "联想销售商机分流",
+      "description": "先查询销售制度与客户策略，再按是否命中知识库分流到销售建议或通用兜底答复。",
+      "enabled": true,
+      "sort_order": 100,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-07 21:36:27",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户问题",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "销售策略检索",
+            "description": "从联想销售制度、报价规则与客户跟进手册中检索相关内容",
+            "query": "{{input.text}}",
+            "knowledgeBase": "默认知识库",
+            "topK": 5,
+            "threshold": 0.16
+          }
+        },
+        {
+          "id": "condition_1",
+          "type": "condition",
+          "x": 660,
+          "y": 180,
+          "data": {
+            "label": "判断是否命中销售知识",
+            "description": "命中则输出销售建议，否则输出谨慎兜底答复",
+            "condition": "len(last.hits) > 0"
+          }
+        },
+        {
+          "id": "ai_hit",
+          "type": "ai",
+          "x": 980,
+          "y": 80,
+          "data": {
+            "label": "生成销售建议",
+            "description": "基于检索内容输出客户推进建议和下一步动作",
+            "prompt": "你是联想中国销售运营中心的销售助理。请基于用户问题和企业知识片段，输出清晰的销售建议。用户问题：{{input.text}}\n\n知识片段：{{last.knowledge_text}}\n\n要求：1. 先给结论；2. 如果涉及跟进动作，按 1、2、3 步列出；3. 如果涉及审批或报价，明确门槛和注意事项；4. 只输出最终答复。",
+            "model": "__default__",
+            "temperature": 0.3
+          }
+        },
+        {
+          "id": "ai_fallback",
+          "type": "ai",
+          "x": 980,
+          "y": 300,
+          "data": {
+            "label": "生成通用建议",
+            "description": "知识不足时给出谨慎建议，避免误导销售动作",
+            "prompt": "你是联想中国销售运营中心的销售助理。当前知识库没有找到明确依据。请对用户问题给出谨慎答复。用户问题：{{input.text}}\n\n要求：1. 明确说明未检索到联想内部正式依据；2. 可给一般销售建议，但不要冒充内部制度；3. 只输出最终答复。",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1290,
+          "y": 190,
+          "data": {
+            "label": "结束节点",
+            "description": "返回答复结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "condition_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "condition_1",
+          "to": "ai_hit",
+          "label": "true"
+        },
+        {
+          "id": "c4",
+          "from": "condition_1",
+          "to": "ai_fallback",
+          "label": "false"
+        },
+        {
+          "id": "c5",
+          "from": "ai_hit",
+          "to": "end_1",
+          "label": ""
+        },
+        {
+          "id": "c6",
+          "from": "ai_fallback",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "",
+        "chat_tagline": "",
+        "welcome_message": "",
+        "agent_description": "",
+        "recommended_questions": [],
+        "input_placeholder": "",
+        "send_button_text": ""
+      },
+      "system_prompt": "你是企业知识库的租户专属智能助理。\n\n请优先根据下方知识库内容回答；如果知识库没有明确答案，先说明知识不足，再给出谨慎建议。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    }
+  ],
+  "updated_at": 1775568987
+}

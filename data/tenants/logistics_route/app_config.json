@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "logistics_route",
+  "app_name": "顺丰速运智能调度中心",
+  "app_subtitle": "运力分配、时效判断与异常处理中台",
+  "chat_title": "顺丰调度中枢",
+  "chat_tagline": "围绕订单区域、时效等级和异常事件，生成更稳的调度与补偿建议。",
+  "welcome_message": "你好，我是顺丰调度中枢。你可以输入配送区域、订单批次、时效要求或延误场景，我会给出调度方案。",
+  "agent_description": "面向物流调度与配送异常场景的智能调度助手，负责路线优化、司机分配与延误处理建议。",
+  "logo": "https://www.google.com/s2/favicons?domain=sf-express.com&sz=128",
+  "recommended_questions": [
+    "上海浦东到杭州滨江的加急件应该怎么排线？",
+    "冷链订单延误 2 小时，通知客户的话术怎么写？",
+    "华南区域晚高峰订单应该优先分给哪类司机？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "顺丰调度后台登录 · 建议先查看线路时效、冷链规则和赔付政策",
+  "input_placeholder": "输入订单批次、配送区域、司机情况或异常场景...",
+  "send_button_text": "生成调度方案",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "logistics_route",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#fff9f7",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#f2ddd4",
+    "text": "#392722",
+    "muted": "#82675d",
+    "accent": "#111111",
+    "accent_strong": "#000000",
+    "accent_soft": "rgba(17, 17, 17, 0.08)",
+    "danger": "#e85b2b",
+    "primary": "#111111",
+    "primary_deep": "#000000",
+    "primary_soft": "rgba(17, 17, 17, 0.08)"
+  }
+}

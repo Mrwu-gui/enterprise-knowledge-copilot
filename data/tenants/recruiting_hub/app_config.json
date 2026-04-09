@@ -1,0 +1,60 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "app_id": "recruiting_hub",
+  "app_name": "智联招聘企业招聘中心",
+  "app_subtitle": "JD 生成、候选人筛选与面试协同平台",
+  "chat_title": "智联招聘官",
+  "chat_tagline": "围绕岗位画像、面试标准和候选人履历，给出更稳的筛选与沟通建议。",
+  "welcome_message": "你好，我是智联招聘官。你可以让我梳理岗位画像、筛选候选人、生成面试提纲或给出 offer 沟通建议。",
+  "agent_description": "面向企业招聘与人才选拔场景的智能招聘助手，负责岗位画像提炼、候选人筛选与面试协同。",
+  "logo": "https://www.google.com/s2/favicons?domain=zhaopin.com&sz=128",
+  "recommended_questions": [
+    "这个销售总监候选人适不适合进入终面？",
+    "帮我生成一份产品经理岗位的结构化面试提纲。",
+    "校招生 offer 发放前需要走哪些审批？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "智联招聘后台登录 · 建议先确认岗位画像、筛选标准和 offer 流程",
+  "input_placeholder": "输入岗位名称、候选人经历、面试问题或 offer 场景...",
+  "send_button_text": "生成筛选建议",
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "recruiting_hub",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f5f9ff",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#dbe5f5",
+    "text": "#1f3558",
+    "muted": "#6b81a4",
+    "accent": "#2b6cff",
+    "accent_strong": "#1f52c9",
+    "accent_soft": "rgba(43, 108, 255, 0.12)",
+    "danger": "#d95f5f",
+    "primary": "#2b6cff",
+    "primary_deep": "#1f52c9",
+    "primary_soft": "rgba(43, 108, 255, 0.12)"
+  }
+}

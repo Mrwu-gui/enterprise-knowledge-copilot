@@ -1,0 +1,98 @@
+{
+  "backend": "hybrid",
+  "qdrant": {
+    "enabled": true,
+    "mode": "server",
+    "url": "https://e327263a-4eaf-4e9e-9f26-5db376fb214c.us-east-1-1.aws.cloud.qdrant.io",
+    "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.aPaCiKZTSEoW70PxGkHMomyXswwrowpKD6JKgg71guA",
+    "path": "data/qdrant_store/marketing_lab",
+    "collection": "tenant_marketing_lab_knowledge",
+    "vector_size": 1024,
+    "distance": "Cosine"
+  },
+  "embedding": {
+    "provider": "siliconcloud",
+    "model": "BAAI/bge-m3",
+    "base_url": "https://api.siliconflow.cn/v1/",
+    "api_key": "sk-zvytchsgjkkhzqrdzlnahmwxnnbouedmtvixrymyomjqdsbx"
+  },
+  "rerank": {
+    "enabled": true,
+    "provider": "siliconcloud",
+    "model": "BAAI/bge-reranker-v2-m3",
+    "base_url": "https://api.siliconflow.cn/v1/",
+    "api_key": "sk-zvytchsgjkkhzqrdzlnahmwxnnbouedmtvixrymyomjqdsbx",
+    "candidate_limit": 12,
+    "top_n": 5
+  },
+  "sparse": {
+    "enabled": true,
+    "provider": "bm25",
+    "k1": 1.5,
+    "b": 0.75,
+    "dense_weight": 0.6,
+    "sparse_weight": 0.4,
+    "fusion_alpha": 0.7,
+    "rrf_k": 50,
+    "query_profiles": {
+      "keyword_exact": {
+        "dense_weight": 0.35,
+        "sparse_weight": 0.65,
+        "fusion_alpha": 0.55
+      },
+      "identifier_lookup": {
+        "dense_weight": 0.25,
+        "sparse_weight": 0.75,
+        "fusion_alpha": 0.45
+      },
+      "faq_semantic": {
+        "dense_weight": 0.72,
+        "sparse_weight": 0.28,
+        "fusion_alpha": 0.82
+      },
+      "process_policy": {
+        "dense_weight": 0.58,
+        "sparse_weight": 0.42,
+        "fusion_alpha": 0.7
+      }
+    }
+  },
+  "orchestration": {
+    "rewrite": {
+      "enabled": true,
+      "expand_synonyms": true,
+      "attempt_expansions": true
+    },
+    "judge": {
+      "min_results": 2,
+      "min_top_score": 0.24,
+      "min_avg_score": 0.16
+    },
+    "routing": {
+      "enabled": true,
+      "profile_backends": {
+        "identifier_lookup": "bm25",
+        "keyword_exact": "hybrid",
+        "faq_semantic": "qdrant",
+        "process_policy": "hybrid"
+      }
+    },
+    "retry": {
+      "enabled": true,
+      "max_attempts": 2,
+      "fallback_top_k": 8,
+      "stages": [
+        {
+          "backend": "hybrid",
+          "top_k": 8,
+          "rewrite_mode": "broad"
+        },
+        {
+          "backend": "bm25",
+          "top_k": 10,
+          "rewrite_mode": "strict"
+        }
+      ]
+    }
+  }
+}
