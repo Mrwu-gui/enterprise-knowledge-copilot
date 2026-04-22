@@ -196,9 +196,23 @@ def split_markdown_with_langchain(markdown_text: str) -> list[Document]:
     if RecursiveCharacterTextSplitter is None:
         return docs
 
+    text_len = len(text)
+    if text_len <= 1200:
+        chunk_size = 720
+        chunk_overlap = 60
+    elif text_len <= 4000:
+        chunk_size = 860
+        chunk_overlap = 90
+    elif text_len <= 9000:
+        chunk_size = 960
+        chunk_overlap = 120
+    else:
+        chunk_size = 1080
+        chunk_overlap = 150
+
     recursive = RecursiveCharacterTextSplitter(
-        chunk_size=900,
-        chunk_overlap=120,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
         separators=["\n## ", "\n### ", "\n\n", "\n", "。", "；", "，", " "],
     )
     final_docs: list[Document] = []

@@ -11,6 +11,9 @@ from collections.abc import AsyncGenerator, Callable
 
 import aiohttp
 
+from backend.concurrency import BusyError, acquire_llm_slot
+from backend.model_config import provider_supports_image
+
 
 def mask_api_key(key: str) -> str:
     """把 Key 做脱敏，避免日志泄露。"""
@@ -58,6 +61,7 @@ def build_provider_route(model_settings: dict, workflow_route: list[str] | None,
                     "provider_label": str(item.get("label") or item.get("name") or f"供应商 {index + 1}"),
                     "base_url": base_url,
                     "model_route": deduped_model_route,
+                    "supports_image": bool(item.get("supports_image")),
                     "api_keys": api_keys,
                 }
             )
@@ -70,6 +74,7 @@ def build_provider_route(model_settings: dict, workflow_route: list[str] | None,
             "provider_label": "默认供应商",
             "base_url": str(model_settings.get("base_url") or default_base_url or "").rstrip("/"),
             "model_route": build_model_route(model_settings, workflow_route),
+            "supports_image": bool(model_settings.get("supports_image")),
             "api_keys": list(model_settings.get("api_keys") or []),
         }
     ]
@@ -88,6 +93,7 @@ def pick_unused_api_key(api_keys: list[str], tried_key_masked: set[str]) -> str:
 async def stream_chat_completion(
     *,
     question: str,
+    images: list[dict] | None,
     system_prompt: str,
     model_settings: dict,
     workflow_route: list[str] | None,
@@ -103,6 +109,22 @@ async def stream_chat_completion(
 ) -> AsyncGenerator[str, None]:
     """执行带重试和降级的流式模型调用。"""
     routes = provider_routes or build_provider_route(model_settings, workflow_route, default_base_url)
+    normalized_images = [
+        {
+            "data_url": str(item.get("data_url") or "").strip(),
+            "mime_type": str(item.get("mime_type") or "image/jpeg").strip() or "image/jpeg",
+            "name": str(item.get("name") or "image").strip() or "image",
+        }
+        for item in (images or [])
+        if isinstance(item, dict) and str(item.get("data_url") or "").strip().startswith("data:image/")
+    ]
+    if normalized_images:
+        routes = [provider for provider in routes if provider_supports_image(provider)]
+        if not routes:
+            on_error("vision_not_supported")
+            yield f"data: {json.dumps({'content': '当前智能体绑定的模型仅支持文本输入，请切换到支持图文的模型后再上传图片。'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
 
     for provider_idx, provider in enumerate(routes):
         api_keys = list(provider.get("api_keys") or [])
@@ -119,65 +141,71 @@ async def stream_chat_completion(
                 tried_key_masked.add(mask_api_key(current_key))
                 try:
                     on_model_selected(model)
-                    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx)) as session:
-                        payload = {
-                            "model": model,
-                            "messages": [
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": question},
-                            ],
-                            "stream": True,
-                            "temperature": 0.7,
-                            "max_tokens": 2000,
-                        }
-                        headers = {
-                            "Authorization": f"Bearer {current_key}",
-                            "Content-Type": "application/json",
-                        }
-                        async with session.post(
-                            f"{base_url}/chat/completions",
-                            json=payload,
-                            headers=headers,
-                            timeout=aiohttp.ClientTimeout(total=120),
-                        ) as resp:
-                            if resp.status == 200:
-                                async for line in resp.content:
-                                    line = line.decode("utf-8").strip()
-                                    if not line or not line.startswith("data: "):
-                                        continue
-                                    data_str = line[6:]
-                                    if data_str == "[DONE]":
-                                        break
-                                    try:
-                                        data = json.loads(data_str)
-                                    except json.JSONDecodeError:
-                                        continue
-                                    delta = data.get("choices", [{}])[0].get("delta", {})
-                                    content = delta.get("content", "")
-                                    if not content:
-                                        continue
-                                    safe_content, output_events = protect_output(content)
-                                    for event in output_events:
-                                        on_output_event(event)
-                                    collector.append(safe_content)
-                                    yield f"data: {json.dumps({'content': safe_content})}\n\n"
-                                return
+                    async with acquire_llm_slot():
+                        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx)) as session:
+                            payload = {
+                                "model": model,
+                                "messages": [
+                                    {"role": "system", "content": system_prompt},
+                                    {"role": "user", "content": _build_user_content(question, normalized_images)},
+                                ],
+                                "stream": True,
+                                "temperature": 0.7,
+                                "max_tokens": 2000,
+                            }
+                            headers = {
+                                "Authorization": f"Bearer {current_key}",
+                                "Content-Type": "application/json",
+                            }
+                            async with session.post(
+                                f"{base_url}/chat/completions",
+                                json=payload,
+                                headers=headers,
+                                timeout=aiohttp.ClientTimeout(total=120),
+                            ) as resp:
+                                if resp.status == 200:
+                                    async for line in resp.content:
+                                        line = line.decode("utf-8").strip()
+                                        if not line or not line.startswith("data: "):
+                                            continue
+                                        data_str = line[6:]
+                                        if data_str == "[DONE]":
+                                            break
+                                        try:
+                                            data = json.loads(data_str)
+                                        except json.JSONDecodeError:
+                                            continue
+                                        delta = data.get("choices", [{}])[0].get("delta", {})
+                                        content = delta.get("content", "")
+                                        if not content:
+                                            continue
+                                        safe_content, output_events = protect_output(content)
+                                        for event in output_events:
+                                            on_output_event(event)
+                                        collector.append(safe_content)
+                                        yield f"data: {json.dumps({'content': safe_content})}\n\n"
+                                    return
 
-                            error_text = await resp.text()
-                            should_retry_key = resp.status in {401, 429, 500, 502, 503, 504}
-                            can_retry_key = key_attempt < max_key_attempts - 1
-                            can_degrade_model = attempt_idx < len(model_route) - 1
-                            can_degrade_provider = provider_idx < len(routes) - 1
-                            if should_retry_key and can_retry_key:
-                                yield f"data: {json.dumps({'status': 'degrading', 'content': ''})}\n\n"
-                                continue
-                            if can_degrade_model or can_degrade_provider:
-                                yield f"data: {json.dumps({'status': 'degrading', 'content': ''})}\n\n"
-                                break
-                            on_error(f"llm_status_{resp.status}:{error_text[:200]}")
-                            yield f"data: {json.dumps({'content': user_facing_error()})}\n\n"
-                            yield "data: [DONE]\n\n"
-                            return
+                                error_text = await resp.text()
+                                should_retry_key = resp.status in {401, 429, 500, 502, 503, 504}
+                                can_retry_key = key_attempt < max_key_attempts - 1
+                                can_degrade_model = attempt_idx < len(model_route) - 1
+                                can_degrade_provider = provider_idx < len(routes) - 1
+                                if should_retry_key and can_retry_key:
+                                    yield f"data: {json.dumps({'status': 'degrading', 'content': ''})}\n\n"
+                                    continue
+                                if can_degrade_model or can_degrade_provider:
+                                    yield f"data: {json.dumps({'status': 'degrading', 'content': ''})}\n\n"
+                                    break
+                                on_error(f"llm_status_{resp.status}:{error_text[:200]}")
+                                yield f"data: {json.dumps({'content': user_facing_error()})}\n\n"
+                                yield "data: [DONE]\n\n"
+                                return
+                except BusyError:
+                    on_error("llm_busy")
+                    yield f"data: {json.dumps({'content': '当前咨询人数较多，请稍后再试。'})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
                 except asyncio.TimeoutError:
                     can_retry_key = key_attempt < max_key_attempts - 1
                     can_degrade_model = attempt_idx < len(model_route) - 1
@@ -206,3 +234,18 @@ async def stream_chat_completion(
                     yield f"data: {json.dumps({'content': user_facing_error()})}\n\n"
                     yield "data: [DONE]\n\n"
                     return
+
+
+def _build_user_content(question: str, images: list[dict]) -> str | list[dict]:
+    clean_question = str(question or "").strip()
+    if not images:
+        return clean_question
+    content: list[dict] = []
+    if clean_question:
+        content.append({"type": "text", "text": clean_question})
+    for item in images:
+        data_url = str(item.get("data_url") or "").strip()
+        if not data_url:
+            continue
+        content.append({"type": "image_url", "image_url": {"url": data_url}})
+    return content or clean_question

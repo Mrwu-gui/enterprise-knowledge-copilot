@@ -1,0 +1,1209 @@
+{
+  "catalog": [
+    {
+      "tag_id": "tag_report_interpreter_报告类型",
+      "name": "报告类型",
+      "library_id": "kb_report_interpreter",
+      "values": [
+        {
+          "value_id": "tagv_report_interpreter_报告类型_1",
+          "name": "血常规",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_report_interpreter_报告类型_2",
+          "name": "生化",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_report_interpreter_报告类型_3",
+          "name": "CT",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_report_interpreter_报告类型_4",
+          "name": "MRI",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_report_interpreter_适用场景",
+      "name": "适用场景",
+      "library_id": "kb_report_interpreter",
+      "values": [
+        {
+          "value_id": "tagv_report_interpreter_适用场景_1",
+          "name": "门诊复查",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_report_interpreter_适用场景_2",
+          "name": "住院随访",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_report_interpreter_适用场景_3",
+          "name": "体检报告",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_diagnosis_assistant_重点科室",
+      "name": "重点科室",
+      "library_id": "kb_diagnosis_assistant",
+      "values": [
+        {
+          "value_id": "tagv_diagnosis_assistant_重点科室_1",
+          "name": "全科",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_diagnosis_assistant_重点科室_2",
+          "name": "心内科",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_diagnosis_assistant_重点科室_3",
+          "name": "呼吸内科",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_diagnosis_assistant_重点科室_4",
+          "name": "急诊",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_diagnosis_assistant_场景",
+      "name": "场景",
+      "library_id": "kb_diagnosis_assistant",
+      "values": [
+        {
+          "value_id": "tagv_diagnosis_assistant_场景_1",
+          "name": "首诊分流",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_diagnosis_assistant_场景_2",
+          "name": "红旗症状识别",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_diagnosis_assistant_场景_3",
+          "name": "慢病复诊",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_appointment_assistant_预约类型",
+      "name": "预约类型",
+      "library_id": "kb_appointment_assistant",
+      "values": [
+        {
+          "value_id": "tagv_appointment_assistant_预约类型_1",
+          "name": "初诊",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_appointment_assistant_预约类型_2",
+          "name": "复诊",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_appointment_assistant_预约类型_3",
+          "name": "检查预约",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_appointment_assistant_预约类型_4",
+          "name": "跨科转诊",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_appointment_assistant_渠道",
+      "name": "渠道",
+      "library_id": "kb_appointment_assistant",
+      "values": [
+        {
+          "value_id": "tagv_appointment_assistant_渠道_1",
+          "name": "公众号",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_appointment_assistant_渠道_2",
+          "name": "自助机",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_appointment_assistant_渠道_3",
+          "name": "人工窗口",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_infection_control_防控场景",
+      "name": "防控场景",
+      "library_id": "kb_infection_control",
+      "values": [
+        {
+          "value_id": "tagv_infection_control_防控场景_1",
+          "name": "发热门诊",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_infection_control_防控场景_2",
+          "name": "院感上报",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_infection_control_防控场景_3",
+          "name": "隔离观察",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_infection_control_优先级",
+      "name": "优先级",
+      "library_id": "kb_infection_control",
+      "values": [
+        {
+          "value_id": "tagv_infection_control_优先级_1",
+          "name": "普通",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_infection_control_优先级_2",
+          "name": "重点监测",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_infection_control_优先级_3",
+          "name": "紧急上报",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_vaccine_assistant_接种对象",
+      "name": "接种对象",
+      "library_id": "kb_vaccine_assistant",
+      "values": [
+        {
+          "value_id": "tagv_vaccine_assistant_接种对象_1",
+          "name": "儿童",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_vaccine_assistant_接种对象_2",
+          "name": "成人",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_vaccine_assistant_接种对象_3",
+          "name": "老年人",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_vaccine_assistant_接种对象_4",
+          "name": "慢病患者",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_vaccine_assistant_疫苗类型",
+      "name": "疫苗类型",
+      "library_id": "kb_vaccine_assistant",
+      "values": [
+        {
+          "value_id": "tagv_vaccine_assistant_疫苗类型_1",
+          "name": "流感",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_vaccine_assistant_疫苗类型_2",
+          "name": "肺炎",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_vaccine_assistant_疫苗类型_3",
+          "name": "乙肝",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_vaccine_assistant_疫苗类型_4",
+          "name": "HPV",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_elderly_care_人群",
+      "name": "人群",
+      "library_id": "kb_elderly_care",
+      "values": [
+        {
+          "value_id": "tagv_elderly_care_人群_1",
+          "name": "高龄老人",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_elderly_care_人群_2",
+          "name": "慢病老人",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_elderly_care_人群_3",
+          "name": "术后老人",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_elderly_care_主题",
+      "name": "主题",
+      "library_id": "kb_elderly_care",
+      "values": [
+        {
+          "value_id": "tagv_elderly_care_主题_1",
+          "name": "高血压",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_elderly_care_主题_2",
+          "name": "糖尿病",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_elderly_care_主题_3",
+          "name": "跌倒预防",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_elderly_care_主题_4",
+          "name": "营养",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_oral_health_口腔场景",
+      "name": "口腔场景",
+      "library_id": "kb_oral_health",
+      "values": [
+        {
+          "value_id": "tagv_oral_health_口腔场景_1",
+          "name": "牙痛",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_oral_health_口腔场景_2",
+          "name": "洁牙",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_oral_health_口腔场景_3",
+          "name": "拔牙",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_oral_health_口腔场景_4",
+          "name": "种植",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_oral_health_流程",
+      "name": "流程",
+      "library_id": "kb_oral_health",
+      "values": [
+        {
+          "value_id": "tagv_oral_health_流程_1",
+          "name": "初诊",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_oral_health_流程_2",
+          "name": "术后",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_oral_health_流程_3",
+          "name": "复查",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_ophthalmology_眼科场景",
+      "name": "眼科场景",
+      "library_id": "kb_ophthalmology",
+      "values": [
+        {
+          "value_id": "tagv_ophthalmology_眼科场景_1",
+          "name": "视力下降",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_ophthalmology_眼科场景_2",
+          "name": "红眼",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_ophthalmology_眼科场景_3",
+          "name": "干眼",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_ophthalmology_眼科场景_4",
+          "name": "术后复查",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_ophthalmology_检查",
+      "name": "检查",
+      "library_id": "kb_ophthalmology",
+      "values": [
+        {
+          "value_id": "tagv_ophthalmology_检查_1",
+          "name": "验光",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_ophthalmology_检查_2",
+          "name": "眼压",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_ophthalmology_检查_3",
+          "name": "OCT",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_ophthalmology_检查_4",
+          "name": "眼底照相",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_sleep_health_睡眠问题",
+      "name": "睡眠问题",
+      "library_id": "kb_sleep_health",
+      "values": [
+        {
+          "value_id": "tagv_sleep_health_睡眠问题_1",
+          "name": "失眠",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_sleep_health_睡眠问题_2",
+          "name": "打鼾",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_sleep_health_睡眠问题_3",
+          "name": "呼吸暂停",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_sleep_health_睡眠问题_4",
+          "name": "日间困倦",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_sleep_health_检查",
+      "name": "检查",
+      "library_id": "kb_sleep_health",
+      "values": [
+        {
+          "value_id": "tagv_sleep_health_检查_1",
+          "name": "睡眠监测",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_sleep_health_检查_2",
+          "name": "量表评估",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_sleep_health_检查_3",
+          "name": "复诊",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_rehab_training_康复主题",
+      "name": "康复主题",
+      "library_id": "kb_rehab_training",
+      "values": [
+        {
+          "value_id": "tagv_rehab_training_康复主题_1",
+          "name": "术后康复",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_rehab_training_康复主题_2",
+          "name": "腰背痛",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_rehab_training_康复主题_3",
+          "name": "膝关节",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_rehab_training_康复主题_4",
+          "name": "卒中后训练",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_rehab_training_阶段",
+      "name": "阶段",
+      "library_id": "kb_rehab_training",
+      "values": [
+        {
+          "value_id": "tagv_rehab_training_阶段_1",
+          "name": "初期",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_rehab_training_阶段_2",
+          "name": "巩固期",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_rehab_training_阶段_3",
+          "name": "居家期",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_tcm_wellness_主题",
+      "name": "主题",
+      "library_id": "kb_tcm_wellness",
+      "values": [
+        {
+          "value_id": "tagv_tcm_wellness_主题_1",
+          "name": "体质调养",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_tcm_wellness_主题_2",
+          "name": "饮食起居",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_tcm_wellness_主题_3",
+          "name": "针灸推拿",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_tcm_wellness_主题_4",
+          "name": "门诊准备",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_tcm_wellness_季节",
+      "name": "季节",
+      "library_id": "kb_tcm_wellness",
+      "values": [
+        {
+          "value_id": "tagv_tcm_wellness_季节_1",
+          "name": "春",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_tcm_wellness_季节_2",
+          "name": "夏",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_tcm_wellness_季节_3",
+          "name": "秋",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_tcm_wellness_季节_4",
+          "name": "冬",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_insurance_rules_医保场景",
+      "name": "医保场景",
+      "library_id": "kb_insurance_rules",
+      "values": [
+        {
+          "value_id": "tagv_insurance_rules_医保场景_1",
+          "name": "门诊结算",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_insurance_rules_医保场景_2",
+          "name": "异地备案",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_insurance_rules_医保场景_3",
+          "name": "转诊",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_insurance_rules_医保场景_4",
+          "name": "人工复核",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_insurance_rules_对象",
+      "name": "对象",
+      "library_id": "kb_insurance_rules",
+      "values": [
+        {
+          "value_id": "tagv_insurance_rules_对象_1",
+          "name": "职工医保",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_insurance_rules_对象_2",
+          "name": "居民医保",
+          "synonyms": []
+        },
+        {
+          "value_id": "tagv_insurance_rules_对象_3",
+          "name": "异地医保",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_4dacd3c290",
+      "name": "体检报告",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_4dacd3c290",
+          "name": "体检报告",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_5e87b0bdb4",
+      "name": "参考范围",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_5e87b0bdb4",
+          "name": "参考范围",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_3b4063f9df",
+      "name": "血糖",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_3b4063f9df",
+          "name": "血糖",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_76936fca41",
+      "name": "血脂",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_76936fca41",
+          "name": "血脂",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_064b3e2089",
+      "name": "血压",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_064b3e2089",
+          "name": "血压",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_9b0850c096",
+      "name": "复查建议",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_9b0850c096",
+          "name": "复查建议",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_6f30d28610",
+      "name": "健康管理",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_6f30d28610",
+          "name": "健康管理",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_72aa9206de",
+      "name": "演示模板",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_72aa9206de",
+          "name": "演示模板",
+          "synonyms": []
+        }
+      ]
+    },
+    {
+      "tag_id": "tag_31ca5e788b",
+      "name": "话术规范",
+      "library_id": "kb_health_check_assistant",
+      "values": [
+        {
+          "value_id": "tagv_31ca5e788b",
+          "name": "话术规范",
+          "synonyms": []
+        }
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "library_id": "kb_report_interpreter",
+      "name": "报告解读知识库",
+      "description": "面向检验单、影像结论和复查建议的解释型知识库。"
+    },
+    {
+      "library_id": "kb_diagnosis_assistant",
+      "name": "辅助诊断知识库",
+      "description": "面向症状分层、就诊科室建议和临床路径提醒的分诊知识库。"
+    },
+    {
+      "library_id": "kb_appointment_assistant",
+      "name": "智能预约知识库",
+      "description": "面向门诊、检查、复诊与医保预约规则的导诊知识库。"
+    },
+    {
+      "library_id": "kb_infection_control",
+      "name": "传染病防控知识库",
+      "description": "面向院感上报、隔离要求和发热病例处置的防控知识库。"
+    },
+    {
+      "library_id": "kb_vaccine_assistant",
+      "name": "疫苗接种知识库",
+      "description": "面向儿童、成人和重点人群接种前咨询的接种知识库。"
+    },
+    {
+      "library_id": "kb_elderly_care",
+      "name": "老年健康知识库",
+      "description": "面向老年慢病管理、跌倒风险和复诊提醒的慢病知识库。"
+    },
+    {
+      "library_id": "kb_oral_health",
+      "name": "口腔健康知识库",
+      "description": "面向牙痛、洁牙、种植修复和术后注意事项的口腔知识库。"
+    },
+    {
+      "library_id": "kb_ophthalmology",
+      "name": "眼科健康知识库",
+      "description": "面向视力异常、红眼、干眼与术后复查的眼科知识库。"
+    },
+    {
+      "library_id": "kb_sleep_health",
+      "name": "睡眠健康知识库",
+      "description": "面向失眠、睡眠呼吸暂停和睡眠监测准备的睡眠医学知识库。"
+    },
+    {
+      "library_id": "kb_rehab_training",
+      "name": "康复训练知识库",
+      "description": "面向术后康复、骨关节训练和居家锻炼提醒的康复知识库。"
+    },
+    {
+      "library_id": "kb_tcm_wellness",
+      "name": "中医养生知识库",
+      "description": "面向四时调养、体质辨识和中医门诊准备的中医知识库。"
+    },
+    {
+      "library_id": "kb_insurance_rules",
+      "name": "医保规则知识库",
+      "description": "面向医保材料、备案、门诊结算与人工复核口径的医保知识库。"
+    },
+    {
+      "library_id": "kb_health_check_assistant",
+      "name": "体检报告知识库",
+      "description": "用于体检报告助手，沉淀参考范围、话术模板和复查建议。"
+    }
+  ],
+  "categories": [
+    {
+      "category_id": "cat_health_check_reference",
+      "library_id": "kb_health_check_assistant",
+      "name": "参考范围与解读模板"
+    }
+  ],
+  "items": {
+    "permanent/kb_report_interpreter/report_interpreter_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_report_interpreter/report_interpreter_01_核心服务规范.md",
+      "tags": [
+        "血常规",
+        "门诊复查"
+      ],
+      "library_id": "kb_report_interpreter",
+      "category_id": ""
+    },
+    "permanent/kb_report_interpreter/report_interpreter_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_report_interpreter/report_interpreter_02_当前重点场景.md",
+      "tags": [
+        "血常规",
+        "门诊复查"
+      ],
+      "library_id": "kb_report_interpreter",
+      "category_id": ""
+    },
+    "permanent/kb_report_interpreter/report_interpreter_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_report_interpreter/report_interpreter_03_本周公告.md",
+      "tags": [
+        "血常规",
+        "门诊复查"
+      ],
+      "library_id": "kb_report_interpreter",
+      "category_id": ""
+    },
+    "permanent/kb_diagnosis_assistant/diagnosis_assistant_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_diagnosis_assistant/diagnosis_assistant_01_核心服务规范.md",
+      "tags": [
+        "全科",
+        "首诊分流"
+      ],
+      "library_id": "kb_diagnosis_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_diagnosis_assistant/diagnosis_assistant_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_diagnosis_assistant/diagnosis_assistant_02_当前重点场景.md",
+      "tags": [
+        "全科",
+        "首诊分流"
+      ],
+      "library_id": "kb_diagnosis_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_diagnosis_assistant/diagnosis_assistant_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_diagnosis_assistant/diagnosis_assistant_03_本周公告.md",
+      "tags": [
+        "全科",
+        "首诊分流"
+      ],
+      "library_id": "kb_diagnosis_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_appointment_assistant/appointment_assistant_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_appointment_assistant/appointment_assistant_01_核心服务规范.md",
+      "tags": [
+        "初诊",
+        "公众号"
+      ],
+      "library_id": "kb_appointment_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_appointment_assistant/appointment_assistant_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_appointment_assistant/appointment_assistant_02_当前重点场景.md",
+      "tags": [
+        "初诊",
+        "公众号"
+      ],
+      "library_id": "kb_appointment_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_appointment_assistant/appointment_assistant_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_appointment_assistant/appointment_assistant_03_本周公告.md",
+      "tags": [
+        "初诊",
+        "公众号"
+      ],
+      "library_id": "kb_appointment_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_infection_control/infection_control_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_infection_control/infection_control_01_核心服务规范.md",
+      "tags": [
+        "发热门诊",
+        "普通"
+      ],
+      "library_id": "kb_infection_control",
+      "category_id": ""
+    },
+    "permanent/kb_infection_control/infection_control_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_infection_control/infection_control_02_当前重点场景.md",
+      "tags": [
+        "发热门诊",
+        "普通"
+      ],
+      "library_id": "kb_infection_control",
+      "category_id": ""
+    },
+    "permanent/kb_infection_control/infection_control_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_infection_control/infection_control_03_本周公告.md",
+      "tags": [
+        "发热门诊",
+        "普通"
+      ],
+      "library_id": "kb_infection_control",
+      "category_id": ""
+    },
+    "permanent/kb_vaccine_assistant/vaccine_assistant_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_vaccine_assistant/vaccine_assistant_01_核心服务规范.md",
+      "tags": [
+        "儿童",
+        "流感"
+      ],
+      "library_id": "kb_vaccine_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_vaccine_assistant/vaccine_assistant_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_vaccine_assistant/vaccine_assistant_02_当前重点场景.md",
+      "tags": [
+        "儿童",
+        "流感"
+      ],
+      "library_id": "kb_vaccine_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_vaccine_assistant/vaccine_assistant_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_vaccine_assistant/vaccine_assistant_03_本周公告.md",
+      "tags": [
+        "儿童",
+        "流感"
+      ],
+      "library_id": "kb_vaccine_assistant",
+      "category_id": ""
+    },
+    "permanent/kb_elderly_care/elderly_care_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_elderly_care/elderly_care_01_核心服务规范.md",
+      "tags": [
+        "高龄老人",
+        "高血压"
+      ],
+      "library_id": "kb_elderly_care",
+      "category_id": ""
+    },
+    "permanent/kb_elderly_care/elderly_care_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_elderly_care/elderly_care_02_当前重点场景.md",
+      "tags": [
+        "高龄老人",
+        "高血压"
+      ],
+      "library_id": "kb_elderly_care",
+      "category_id": ""
+    },
+    "permanent/kb_elderly_care/elderly_care_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_elderly_care/elderly_care_03_本周公告.md",
+      "tags": [
+        "高龄老人",
+        "高血压"
+      ],
+      "library_id": "kb_elderly_care",
+      "category_id": ""
+    },
+    "permanent/kb_oral_health/oral_health_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_oral_health/oral_health_01_核心服务规范.md",
+      "tags": [
+        "牙痛",
+        "初诊"
+      ],
+      "library_id": "kb_oral_health",
+      "category_id": ""
+    },
+    "permanent/kb_oral_health/oral_health_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_oral_health/oral_health_02_当前重点场景.md",
+      "tags": [
+        "牙痛",
+        "初诊"
+      ],
+      "library_id": "kb_oral_health",
+      "category_id": ""
+    },
+    "permanent/kb_oral_health/oral_health_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_oral_health/oral_health_03_本周公告.md",
+      "tags": [
+        "牙痛",
+        "初诊"
+      ],
+      "library_id": "kb_oral_health",
+      "category_id": ""
+    },
+    "permanent/kb_ophthalmology/ophthalmology_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_ophthalmology/ophthalmology_01_核心服务规范.md",
+      "tags": [
+        "视力下降",
+        "验光"
+      ],
+      "library_id": "kb_ophthalmology",
+      "category_id": ""
+    },
+    "permanent/kb_ophthalmology/ophthalmology_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_ophthalmology/ophthalmology_02_当前重点场景.md",
+      "tags": [
+        "视力下降",
+        "验光"
+      ],
+      "library_id": "kb_ophthalmology",
+      "category_id": ""
+    },
+    "permanent/kb_ophthalmology/ophthalmology_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_ophthalmology/ophthalmology_03_本周公告.md",
+      "tags": [
+        "视力下降",
+        "验光"
+      ],
+      "library_id": "kb_ophthalmology",
+      "category_id": ""
+    },
+    "permanent/kb_sleep_health/sleep_health_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_sleep_health/sleep_health_01_核心服务规范.md",
+      "tags": [
+        "失眠",
+        "睡眠监测"
+      ],
+      "library_id": "kb_sleep_health",
+      "category_id": ""
+    },
+    "permanent/kb_sleep_health/sleep_health_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_sleep_health/sleep_health_02_当前重点场景.md",
+      "tags": [
+        "失眠",
+        "睡眠监测"
+      ],
+      "library_id": "kb_sleep_health",
+      "category_id": ""
+    },
+    "permanent/kb_sleep_health/sleep_health_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_sleep_health/sleep_health_03_本周公告.md",
+      "tags": [
+        "失眠",
+        "睡眠监测"
+      ],
+      "library_id": "kb_sleep_health",
+      "category_id": ""
+    },
+    "permanent/kb_rehab_training/rehab_training_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_rehab_training/rehab_training_01_核心服务规范.md",
+      "tags": [
+        "术后康复",
+        "初期"
+      ],
+      "library_id": "kb_rehab_training",
+      "category_id": ""
+    },
+    "permanent/kb_rehab_training/rehab_training_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_rehab_training/rehab_training_02_当前重点场景.md",
+      "tags": [
+        "术后康复",
+        "初期"
+      ],
+      "library_id": "kb_rehab_training",
+      "category_id": ""
+    },
+    "permanent/kb_rehab_training/rehab_training_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_rehab_training/rehab_training_03_本周公告.md",
+      "tags": [
+        "术后康复",
+        "初期"
+      ],
+      "library_id": "kb_rehab_training",
+      "category_id": ""
+    },
+    "permanent/kb_tcm_wellness/tcm_wellness_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_tcm_wellness/tcm_wellness_01_核心服务规范.md",
+      "tags": [
+        "体质调养",
+        "春"
+      ],
+      "library_id": "kb_tcm_wellness",
+      "category_id": ""
+    },
+    "permanent/kb_tcm_wellness/tcm_wellness_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_tcm_wellness/tcm_wellness_02_当前重点场景.md",
+      "tags": [
+        "体质调养",
+        "春"
+      ],
+      "library_id": "kb_tcm_wellness",
+      "category_id": ""
+    },
+    "permanent/kb_tcm_wellness/tcm_wellness_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_tcm_wellness/tcm_wellness_03_本周公告.md",
+      "tags": [
+        "体质调养",
+        "春"
+      ],
+      "library_id": "kb_tcm_wellness",
+      "category_id": ""
+    },
+    "permanent/kb_insurance_rules/insurance_rules_01_核心服务规范.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_insurance_rules/insurance_rules_01_核心服务规范.md",
+      "tags": [
+        "门诊结算",
+        "职工医保"
+      ],
+      "library_id": "kb_insurance_rules",
+      "category_id": ""
+    },
+    "permanent/kb_insurance_rules/insurance_rules_02_当前重点场景.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_insurance_rules/insurance_rules_02_当前重点场景.md",
+      "tags": [
+        "门诊结算",
+        "职工医保"
+      ],
+      "library_id": "kb_insurance_rules",
+      "category_id": ""
+    },
+    "permanent/kb_insurance_rules/insurance_rules_03_本周公告.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_insurance_rules/insurance_rules_03_本周公告.md",
+      "tags": [
+        "门诊结算",
+        "职工医保"
+      ],
+      "library_id": "kb_insurance_rules",
+      "category_id": ""
+    },
+    "permanent/kb_health_check_assistant/cat_health_check_reference/health_check_reference_ranges.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_health_check_assistant/cat_health_check_reference/health_check_reference_ranges.md",
+      "tags": [
+        "体检报告",
+        "参考范围",
+        "血糖",
+        "血脂",
+        "血压"
+      ],
+      "library_id": "kb_health_check_assistant",
+      "category_id": "cat_health_check_reference"
+    },
+    "permanent/kb_health_check_assistant/cat_health_check_reference/health_check_followup_guidance.md": {
+      "tier": "permanent",
+      "tier_code": "knowledge",
+      "file": "kb_health_check_assistant/cat_health_check_reference/health_check_followup_guidance.md",
+      "tags": [
+        "体检报告",
+        "复查建议",
+        "健康管理",
+        "话术规范"
+      ],
+      "library_id": "kb_health_check_assistant",
+      "category_id": "cat_health_check_reference"
+    }
+  }
+}

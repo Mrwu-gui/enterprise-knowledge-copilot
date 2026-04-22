@@ -52,6 +52,8 @@ class OpenAICompatibleEmbedding:
         self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.model = model or ""
+        self.max_batch_size = 16
+        self.max_batch_chars = 12000
 
     def _request(self, input_payload: list[str]) -> list[list[float]]:
         if not self.base_url or not self.api_key or not self.model:
@@ -83,7 +85,23 @@ class OpenAICompatibleEmbedding:
         text_list = list(texts)
         if not text_list:
             return []
-        return self._request(text_list)
+        vectors: list[list[float]] = []
+        batch: list[str] = []
+        batch_chars = 0
+        for text in text_list:
+            item = str(text or "")
+            item_chars = len(item)
+            if batch and (len(batch) >= self.max_batch_size or batch_chars + item_chars > self.max_batch_chars):
+                vectors.extend(self._request(batch))
+                batch = []
+                batch_chars = 0
+            batch.append(item)
+            batch_chars += item_chars
+        if batch:
+            vectors.extend(self._request(batch))
+        if len(vectors) != len(text_list):
+            raise ValueError("Embedding 批量返回数量与输入数量不一致")
+        return vectors
 
 
 class SiliconCloudEmbedding(OpenAICompatibleEmbedding):
@@ -103,6 +121,8 @@ class QianfanEmbedding:
         self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.model = model or ""
+        self.max_batch_size = 16
+        self.max_batch_chars = 12000
 
     def _request(self, input_payload: list[str]) -> list[list[float]]:
         if not self.base_url or not self.api_key or not self.model:
@@ -134,7 +154,23 @@ class QianfanEmbedding:
         text_list = list(texts)
         if not text_list:
             return []
-        return self._request(text_list)
+        vectors: list[list[float]] = []
+        batch: list[str] = []
+        batch_chars = 0
+        for text in text_list:
+            item = str(text or "")
+            item_chars = len(item)
+            if batch and (len(batch) >= self.max_batch_size or batch_chars + item_chars > self.max_batch_chars):
+                vectors.extend(self._request(batch))
+                batch = []
+                batch_chars = 0
+            batch.append(item)
+            batch_chars += item_chars
+        if batch:
+            vectors.extend(self._request(batch))
+        if len(vectors) != len(text_list):
+            raise ValueError("Embedding 批量返回数量与输入数量不一致")
+        return vectors
 
 
 def get_embedding_backend(config_data: dict | None = None):

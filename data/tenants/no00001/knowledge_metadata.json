@@ -3,6 +3,7 @@
     {
       "tag_id": "tag_1775706003221_4c78f2",
       "name": "科室",
+      "library_id": "kb_d13c5f08a2",
       "values": [
         {
           "value_id": "tagv_1775706003221_fcf618",
@@ -22,6 +23,11 @@
       "library_id": "kb_d13c5f08a2",
       "name": "辅助1",
       "description": "付诸 2"
+    },
+    {
+      "library_id": "kb_e849345da9",
+      "name": "知识库2",
+      "description": "1111"
     }
   ],
   "categories": [
@@ -47,6 +53,41 @@
       ],
       "library_id": "kb_d13c5f08a2",
       "category_id": "cat_57fa6aee28"
+    },
+    "seasonal/武富贵的简历 (3).md": {
+      "tier": "seasonal",
+      "tier_code": "L2",
+      "file": "武富贵的简历 (3).md",
+      "tags": [
+        "五官科"
+      ],
+      "library_id": "kb_d13c5f08a2",
+      "category_id": "cat_57fa6aee28",
+      "preview": {
+        "display_mode": "pdf",
+        "page_count": 3,
+        "outline": [
+          "武富贵的简历 (3)",
+          "第 1 页",
+          "第 2 页",
+          "第 3 页"
+        ],
+        "tables": []
+      },
+      "source_name": "武富贵的简历 (3).pdf",
+      "pdf_mode": "auto",
+      "display_mode": "pdf",
+      "original_suffix": ".pdf",
+      "table_header_mode": "auto",
+      "parse_mode": "auto",
+      "parser_chain": [
+        "format_router",
+        "langchain_loader",
+        "pdf_table_extractor",
+        "markdown_normalizer",
+        "semantic_chunker"
+      ],
+      "source_type": "pdf"
     }
   }
 }

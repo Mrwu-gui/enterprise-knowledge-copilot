@@ -38,6 +38,20 @@ def _metadata_key(tier: str, file_name: str) -> str:
     return f"{canonical}/{clean_file}"
 
 
+def _find_metadata_key(items: dict[str, dict], tier: str, file_name: str) -> str:
+    direct_key = _metadata_key(tier, file_name)
+    if direct_key in items:
+        return direct_key
+    clean_file = str(file_name or "").strip().replace("\\", "/").lstrip("/")
+    for key, value in items.items():
+        if not isinstance(value, dict):
+            continue
+        existing_name = str(value.get("file") or key.split("/", 1)[-1] or "").strip().replace("\\", "/").lstrip("/")
+        if existing_name == clean_file:
+            return key
+    return direct_key
+
+
 def _stable_id(prefix: str, seed: str) -> str:
     clean = str(seed or "").strip()
     if not clean:
@@ -60,9 +74,17 @@ def _normalize_tags(tags: list[str] | tuple[str, ...] | set[str] | None) -> list
     return result
 
 
-def _normalize_tag_groups(entries: list | None) -> list[dict]:
+def _normalize_tag_groups(
+    entries: list | None,
+    libraries: list[dict] | None = None,
+    *,
+    default_library_id: str = "",
+) -> list[dict]:
     groups: list[dict] = []
     seen_group_ids: set[str] = set()
+    normalized_libraries = _normalize_library_records(libraries)
+    valid_library_ids = {item["library_id"] for item in normalized_libraries}
+    fallback_library_id = default_library_id or normalized_libraries[0]["library_id"]
     for index, raw in enumerate(entries or [], start=1):
         if isinstance(raw, str):
             group_name = str(raw).strip()
@@ -73,6 +95,7 @@ def _normalize_tag_groups(entries: list | None) -> list[dict]:
                 {
                     "tag_id": group_id,
                     "name": group_name,
+                    "library_id": fallback_library_id,
                     "values": [
                         {
                             "value_id": _stable_id("tagv", f"{group_name}:{group_name}"),
@@ -92,6 +115,9 @@ def _normalize_tag_groups(entries: list | None) -> list[dict]:
         if group_id in seen_group_ids:
             continue
         seen_group_ids.add(group_id)
+        library_id = str(raw.get("library_id") or "").strip() or fallback_library_id
+        if library_id not in valid_library_ids:
+            library_id = fallback_library_id
         values: list[dict] = []
         seen_value_ids: set[str] = set()
         raw_values = raw.get("values") if isinstance(raw.get("values"), list) else raw.get("tag_values")
@@ -120,6 +146,7 @@ def _normalize_tag_groups(entries: list | None) -> list[dict]:
             {
                 "tag_id": group_id,
                 "name": group_name,
+                "library_id": library_id,
                 "values": values,
             }
         )
@@ -220,8 +247,11 @@ def load_knowledge_metadata(tenant_id: str, tenant_name: str = "") -> dict:
     libraries = data.get("libraries") if isinstance(data, dict) else []
     categories = data.get("categories") if isinstance(data, dict) else []
     items = data.get("items") if isinstance(data, dict) else {}
-    normalized_catalog = _normalize_tag_groups(catalog if isinstance(catalog, list) else [])
     normalized_libraries = _normalize_library_records(libraries if isinstance(libraries, list) else [])
+    normalized_catalog = _normalize_tag_groups(
+        catalog if isinstance(catalog, list) else [],
+        normalized_libraries,
+    )
     normalized_categories = _normalize_category_records(categories if isinstance(categories, list) else [], normalized_libraries)
     if not isinstance(items, dict):
         items = {}
@@ -260,15 +290,15 @@ def load_knowledge_metadata(tenant_id: str, tenant_name: str = "") -> dict:
 def save_knowledge_metadata(tenant_id: str, metadata: dict, tenant_name: str = "") -> dict:
     ensure_tenant_storage(tenant_id, tenant_name or tenant_id)
     normalized = load_knowledge_metadata(tenant_id, tenant_name)
-    catalog = metadata.get("catalog") if isinstance(metadata, dict) else []
-    if isinstance(catalog, list):
-        normalized["catalog"] = _normalize_tag_groups(catalog)
     libraries = metadata.get("libraries") if isinstance(metadata, dict) else []
     if isinstance(libraries, list):
         normalized["libraries"] = _normalize_library_records(libraries)
     categories = metadata.get("categories") if isinstance(metadata, dict) else []
     if isinstance(categories, list):
         normalized["categories"] = _normalize_category_records(categories, normalized["libraries"])
+    catalog = metadata.get("catalog") if isinstance(metadata, dict) else []
+    if isinstance(catalog, list):
+        normalized["catalog"] = _normalize_tag_groups(catalog, normalized["libraries"])
     items = metadata.get("items") if isinstance(metadata, dict) else {}
     if isinstance(items, dict):
         normalized["items"] = {}
@@ -296,29 +326,32 @@ def save_knowledge_metadata(tenant_id: str, metadata: dict, tenant_name: str = "
                 **_extract_file_meta_extras(value),
             }
     catalog_groups = [dict(item) for item in (normalized.get("catalog") or []) if isinstance(item, dict)]
-    known_values = set(_flatten_tag_group_values(catalog_groups))
-    for tag in [
-        tag
-        for item in normalized["items"].values()
-        for tag in (item.get("tags") or [])
-    ]:
-        clean = str(tag or "").strip()
-        if clean and clean not in known_values:
-            catalog_groups.append(
-                {
-                    "tag_id": _stable_id("tag", clean),
-                    "name": clean,
-                    "values": [
-                        {
-                            "value_id": _stable_id("tagv", clean),
-                            "name": clean,
-                            "synonyms": [],
-                        }
-                    ],
-                }
-            )
-            known_values.add(clean)
-    normalized["catalog"] = _normalize_tag_groups(catalog_groups)
+    known_values_by_library: dict[str, set[str]] = {}
+    for group in catalog_groups:
+        library_id = str(group.get("library_id") or normalized["libraries"][0]["library_id"]).strip()
+        known_values_by_library.setdefault(library_id, set()).update(_flatten_tag_group_values([group]))
+    for item in normalized["items"].values():
+        library_id = str(item.get("library_id") or normalized["libraries"][0]["library_id"]).strip()
+        known_values = known_values_by_library.setdefault(library_id, set())
+        for tag in (item.get("tags") or []):
+            clean = str(tag or "").strip()
+            if clean and clean not in known_values:
+                catalog_groups.append(
+                    {
+                        "tag_id": _stable_id("tag", f"{library_id}:{clean}"),
+                        "name": clean,
+                        "library_id": library_id,
+                        "values": [
+                            {
+                                "value_id": _stable_id("tagv", f"{library_id}:{clean}"),
+                                "name": clean,
+                                "synonyms": [],
+                            }
+                        ],
+                    }
+                )
+                known_values.add(clean)
+    normalized["catalog"] = _normalize_tag_groups(catalog_groups, normalized["libraries"])
     path = get_tenant_knowledge_metadata_path(tenant_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -327,7 +360,7 @@ def save_knowledge_metadata(tenant_id: str, metadata: dict, tenant_name: str = "
 
 def get_knowledge_file_meta(tenant_id: str, tier: str, file_name: str, tenant_name: str = "") -> dict:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    key = _metadata_key(tier, file_name)
+    key = _find_metadata_key(metadata["items"], tier, file_name)
     item = metadata["items"].get(key)
     if item:
         return dict(item)
@@ -357,7 +390,7 @@ def set_knowledge_file_meta(
 ) -> dict:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
     canonical = normalize_tier(tier)
-    key = _metadata_key(canonical, file_name)
+    key = _find_metadata_key(metadata["items"], canonical, file_name)
     existing = metadata["items"].get(key, {})
     library_id = str(library_id or existing.get("library_id") or metadata["libraries"][0]["library_id"]).strip()
     if library_id not in {item["library_id"] for item in metadata["libraries"]}:
@@ -377,18 +410,25 @@ def set_knowledge_file_meta(
         **_extract_file_meta_extras(asset_meta),
     }
     catalog_groups = [dict(item) for item in (metadata.get("catalog") or []) if isinstance(item, dict)]
-    known_values = set(_flatten_tag_group_values(catalog_groups))
+    known_values = set(
+        _flatten_tag_group_values([
+            group
+            for group in catalog_groups
+            if str(group.get("library_id") or metadata["libraries"][0]["library_id"]).strip() == library_id
+        ])
+    )
     for tag in metadata["items"][key]["tags"]:
         clean = str(tag or "").strip()
         if not clean or clean in known_values:
             continue
         catalog_groups.append(
             {
-                "tag_id": _stable_id("tag", clean),
+                "tag_id": _stable_id("tag", f"{library_id}:{clean}"),
                 "name": clean,
+                "library_id": library_id,
                 "values": [
                     {
-                        "value_id": _stable_id("tagv", clean),
+                        "value_id": _stable_id("tagv", f"{library_id}:{clean}"),
                         "name": clean,
                         "synonyms": [],
                     }
@@ -396,7 +436,7 @@ def set_knowledge_file_meta(
             }
         )
         known_values.add(clean)
-    metadata["catalog"] = _normalize_tag_groups(catalog_groups)
+    metadata["catalog"] = _normalize_tag_groups(catalog_groups, metadata["libraries"])
     save_knowledge_metadata(tenant_id, metadata, tenant_name)
     return dict(metadata["items"][key])
 
@@ -419,22 +459,34 @@ def set_knowledge_file_tags(
 
 def delete_knowledge_file_meta(tenant_id: str, tier: str, file_name: str, tenant_name: str = "") -> None:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    metadata["items"].pop(_metadata_key(tier, file_name), None)
+    metadata["items"].pop(_find_metadata_key(metadata["items"], tier, file_name), None)
     save_knowledge_metadata(tenant_id, metadata, tenant_name)
 
 
-def list_knowledge_tags(tenant_id: str, tenant_name: str = "") -> list[str]:
+def list_knowledge_tags(tenant_id: str, tenant_name: str = "", library_id: str = "") -> list[str]:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    return _normalize_tags(_flatten_tag_group_values(metadata.get("catalog") or []) + [
+    target_library_id = str(library_id or "").strip()
+    catalog_groups = [
+        item
+        for item in (metadata.get("catalog") or [])
+        if isinstance(item, dict) and (not target_library_id or str(item.get("library_id") or "").strip() == target_library_id)
+    ]
+    return _normalize_tags(_flatten_tag_group_values(catalog_groups) + [
         tag
         for item in metadata["items"].values()
+        if not target_library_id or str(item.get("library_id") or "").strip() == target_library_id
         for tag in (item.get("tags") or [])
     ])
 
 
-def list_knowledge_tag_groups(tenant_id: str, tenant_name: str = "") -> list[dict]:
+def list_knowledge_tag_groups(tenant_id: str, tenant_name: str = "", library_id: str = "") -> list[dict]:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    return [dict(item) for item in (metadata.get("catalog") or []) if isinstance(item, dict)]
+    target_library_id = str(library_id or "").strip()
+    return [
+        dict(item)
+        for item in (metadata.get("catalog") or [])
+        if isinstance(item, dict) and (not target_library_id or str(item.get("library_id") or "").strip() == target_library_id)
+    ]
 
 
 def list_knowledge_libraries(tenant_id: str, tenant_name: str = "") -> list[dict]:
@@ -466,18 +518,144 @@ def save_knowledge_structure(
     return metadata
 
 
-def save_knowledge_tag_catalog(tenant_id: str, tags: list[str], tenant_name: str = "") -> list[str]:
+def save_knowledge_tag_catalog(tenant_id: str, tags: list[str], tenant_name: str = "", library_id: str = "") -> list[str]:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    metadata["catalog"] = _normalize_tag_groups(tags)
+    target_library_id = str(library_id or "").strip()
+    next_groups = _normalize_tag_groups(tags, metadata["libraries"], default_library_id=target_library_id)
+    if target_library_id:
+        metadata["catalog"] = [
+            item
+            for item in (metadata.get("catalog") or [])
+            if isinstance(item, dict) and str(item.get("library_id") or "").strip() != target_library_id
+        ] + next_groups
+    else:
+        metadata["catalog"] = next_groups
     save_knowledge_metadata(tenant_id, metadata, tenant_name)
-    return list_knowledge_tags(tenant_id, tenant_name)
+    return list_knowledge_tags(tenant_id, tenant_name, library_id=target_library_id)
 
 
-def save_knowledge_tag_groups(tenant_id: str, groups: list[dict], tenant_name: str = "") -> list[dict]:
+def save_knowledge_tag_groups(tenant_id: str, groups: list[dict], tenant_name: str = "", library_id: str = "") -> list[dict]:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    metadata["catalog"] = _normalize_tag_groups(groups)
+    target_library_id = str(library_id or "").strip()
+    next_groups = _normalize_tag_groups(groups, metadata["libraries"], default_library_id=target_library_id)
+    if target_library_id:
+        metadata["catalog"] = [
+            item
+            for item in (metadata.get("catalog") or [])
+            if isinstance(item, dict) and str(item.get("library_id") or "").strip() != target_library_id
+        ] + next_groups
+    else:
+        metadata["catalog"] = next_groups
     save_knowledge_metadata(tenant_id, metadata, tenant_name)
-    return list(metadata["catalog"])
+    return list_knowledge_tag_groups(tenant_id, tenant_name, library_id=target_library_id)
+
+
+def _normalize_knowledge_scope(scope: dict | None) -> dict[str, set[str]]:
+    raw = scope if isinstance(scope, dict) else {}
+    return {
+        "tiers": {
+            _public_tier_code(str(item))
+            for item in (raw.get("tiers") or [])
+            if str(item).strip()
+        },
+        "tags": {
+            str(item).strip().lower()
+            for item in (raw.get("tags") or [])
+            if str(item).strip()
+        },
+        "files": {
+            str(item).strip()
+            for item in (raw.get("files") or [])
+            if str(item).strip()
+        },
+        "libraries": {
+            str(item).strip()
+            for item in (raw.get("libraries") or [])
+            if str(item).strip()
+        },
+        "categories": {
+            str(item).strip()
+            for item in (raw.get("categories") or [])
+            if str(item).strip()
+        },
+    }
+
+
+def resolve_retrieval_scope_meta(
+    *,
+    tenant_id: str,
+    source: str,
+    tier: str,
+    tenant_name: str = "",
+    metadata: dict | None = None,
+) -> dict:
+    loaded_metadata = metadata if isinstance(metadata, dict) else load_knowledge_metadata(tenant_id, tenant_name)
+    library_map = {str(item.get("library_id") or ""): dict(item) for item in loaded_metadata.get("libraries") or []}
+    category_map = {str(item.get("category_id") or ""): dict(item) for item in loaded_metadata.get("categories") or []}
+    clean_source = str(source or "").strip()
+    clean_tier = str(tier or "").strip() or "permanent"
+    source_name = clean_source.split("/", 1)[-1]
+    metadata_items = loaded_metadata.get("items", {}) if isinstance(loaded_metadata.get("items"), dict) else {}
+    meta = None
+    for candidate in (clean_source, source_name, clean_source.split("/")[-1]):
+        if not candidate:
+            continue
+        found_key = _find_metadata_key(metadata_items, clean_tier, candidate)
+        if found_key in metadata_items:
+            meta = metadata_items.get(found_key)
+            break
+    tags = list((meta or {}).get("tags") or [])
+    library_id = str((meta or {}).get("library_id") or "").strip()
+    category_id = str((meta or {}).get("category_id") or "").strip()
+    public_tier = _public_tier_code(clean_tier)
+    return {
+        "tags": tags,
+        "tier_code": public_tier,
+        "file_key": f"{public_tier}/{source_name}",
+        "library_id": library_id,
+        "category_id": category_id,
+        "library_name": str((library_map.get(library_id) or {}).get("name") or ""),
+        "category_name": str((category_map.get(category_id) or {}).get("name") or ""),
+    }
+
+
+def retrieval_scope_meta_matches(scope_meta: dict, knowledge_scope: dict | None) -> bool:
+    normalized_scope = _normalize_knowledge_scope(knowledge_scope)
+    allowed_tiers = normalized_scope["tiers"]
+    allowed_tags = normalized_scope["tags"]
+    allowed_files = normalized_scope["files"]
+    allowed_libraries = normalized_scope["libraries"]
+    allowed_categories = normalized_scope["categories"]
+    public_tier = str(scope_meta.get("tier_code") or "").strip()
+    if allowed_tiers and public_tier not in allowed_tiers:
+        return False
+    library_id = str(scope_meta.get("library_id") or "").strip()
+    if allowed_libraries and library_id not in allowed_libraries:
+        return False
+    category_id = str(scope_meta.get("category_id") or "").strip()
+    if allowed_categories and category_id not in allowed_categories:
+        return False
+    if allowed_tags:
+        tag_set = {
+            str(tag).strip().lower()
+            for tag in (scope_meta.get("tags") or [])
+            if str(tag).strip()
+        }
+        if not (tag_set & allowed_tags):
+            return False
+    if allowed_files:
+        source = str(scope_meta.get("source") or "").strip()
+        source_name = source.split("/", 1)[-1]
+        tier = str(scope_meta.get("tier") or "").strip() or "permanent"
+        file_candidates = {
+            source,
+            source_name,
+            str(scope_meta.get("file_key") or "").strip(),
+            f"{tier}/{source_name}",
+        }
+        if not (file_candidates & allowed_files):
+            return False
+    return True
 
 
 def annotate_retrieval_results_with_scope(
@@ -488,72 +666,24 @@ def annotate_retrieval_results_with_scope(
     knowledge_scope: dict | None,
 ) -> list[dict]:
     metadata = load_knowledge_metadata(tenant_id, tenant_name)
-    library_map = {str(item.get("library_id") or ""): dict(item) for item in metadata.get("libraries") or []}
-    category_map = {str(item.get("category_id") or ""): dict(item) for item in metadata.get("categories") or []}
-    scope = knowledge_scope if isinstance(knowledge_scope, dict) else {}
-    allowed_tiers = {
-        _public_tier_code(str(item))
-        for item in (scope.get("tiers") or [])
-        if str(item).strip()
-    }
-    allowed_tags = {
-        str(item).strip().lower()
-        for item in (scope.get("tags") or [])
-        if str(item).strip()
-    }
-    allowed_files = {
-        str(item).strip()
-        for item in (scope.get("files") or [])
-        if str(item).strip()
-    }
-    allowed_libraries = {
-        str(item).strip()
-        for item in (scope.get("libraries") or [])
-        if str(item).strip()
-    }
-    allowed_categories = {
-        str(item).strip()
-        for item in (scope.get("categories") or [])
-        if str(item).strip()
-    }
     filtered: list[dict] = []
     for item in list(results or []):
         source = str(item.get("source") or "").strip()
         tier = str(item.get("tier") or "").strip() or "permanent"
-        source_name = source.split("/", 1)[-1]
-        meta = metadata["items"].get(_metadata_key(tier, source.split("/", 1)[-1]))
-        if meta is None:
-            meta = metadata["items"].get(_metadata_key(tier, source))
-        tags = list((meta or {}).get("tags") or [])
-        library_id = str((meta or {}).get("library_id") or "").strip()
-        category_id = str((meta or {}).get("category_id") or "").strip()
-        public_tier = _public_tier_code(tier)
-        if allowed_tiers and public_tier not in allowed_tiers:
+        scope_meta = resolve_retrieval_scope_meta(
+            tenant_id=tenant_id,
+            tenant_name=tenant_name,
+            source=source,
+            tier=tier,
+            metadata=metadata,
+        )
+        enriched = {
+            **dict(item),
+            **scope_meta,
+            "source": source,
+            "tier": tier,
+        }
+        if not retrieval_scope_meta_matches(enriched, knowledge_scope):
             continue
-        if allowed_libraries and library_id not in allowed_libraries:
-            continue
-        if allowed_categories and category_id not in allowed_categories:
-            continue
-        if allowed_tags:
-            tag_set = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
-            if not (tag_set & allowed_tags):
-                continue
-        if allowed_files:
-            file_candidates = {
-                source,
-                source_name,
-                f"{public_tier}/{source_name}",
-                f"{tier}/{source_name}",
-            }
-            if not (file_candidates & allowed_files):
-                continue
-        enriched = dict(item)
-        enriched["tags"] = tags
-        enriched["tier_code"] = public_tier
-        enriched["file_key"] = f"{public_tier}/{source_name}"
-        enriched["library_id"] = library_id
-        enriched["category_id"] = category_id
-        enriched["library_name"] = str((library_map.get(library_id) or {}).get("name") or "")
-        enriched["category_name"] = str((category_map.get(category_id) or {}).get("name") or "")
         filtered.append(enriched)
     return filtered

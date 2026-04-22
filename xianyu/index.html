@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>企业级 AI 知识助手平台 — 可装配 · 可交付 · 可迭代</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--p:#4f46e5;--pl:#6366f1;--pd:#3730a3;--c:#0891b2;--bg:#ffffff;--bg1:#f8fafc;--bg2:#f1f5f9;--bg3:#e2e8f0;--t:#1e293b;--t2:#64748b;--t3:#94a3b8;--ok:#059669;--accent:#ec4899}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--t);line-height:1.7;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.container{max-width:1200px;margin:0 auto;padding:0 20px}
+@media(max-width:768px){.container{padding:0 16px}}
+@media(max-width:480px){.container{padding:0 12px}}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--bg3);padding:0 16px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+nav .in{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+nav .logo{font-weight:800;font-size:0.95rem;display:flex;align-items:center;gap:8px}
+nav .logo span{background:linear-gradient(135deg,var(--pl),var(--c));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+nav .links{display:flex;gap:20px}
+nav .links a{color:var(--t2);text-decoration:none;font-size:0.78rem;font-weight:500;transition:color 0.2s}
+nav .links a:hover{color:var(--p)}
+@media(max-width:768px){nav .links{display:none}nav{padding:0 12px}nav .logo{font-size:0.88rem}}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:80px 16px 40px;position:relative;background:linear-gradient(180deg,var(--bg) 0%,var(--bg1) 100%)}
+.hero::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(circle at 30% 40%,rgba(99,102,241,0.05) 0%,transparent 50%),radial-gradient(circle at 70% 60%,rgba(8,145,178,0.05) 0%,transparent 50%);pointer-events:none}
+.hero-c{position:relative;z-index:1;max-width:820px}
+.hero .tag{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(8,145,178,0.08));border:1px solid rgba(99,102,241,0.2);border-radius:999px;padding:6px 14px;font-size:0.72rem;color:var(--p);margin-bottom:20px;font-weight:600}
+.hero h1{font-size:clamp(1.6rem,5.5vw,3.6rem);font-weight:800;line-height:1.2;margin-bottom:16px}
+.hero h1 .g{background:linear-gradient(135deg,var(--pl),var(--c));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero .sub{font-size:0.95rem;color:var(--t2);max-width:640px;margin:0 auto 28px;line-height:1.7}
+.hero .sub strong{color:var(--t);font-weight:600}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:10px;font-size:0.88rem;font-weight:600;text-decoration:none;transition:all 0.25s;cursor:pointer;border:none}
+.btn-p{background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;box-shadow:0 4px 16px rgba(79,70,229,0.25)}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(79,70,229,0.35)}
+.btn-g{background:var(--bg);color:var(--t);border:1px solid var(--bg3);box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.btn-g:hover{border-color:var(--p);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+@media(max-width:640px){.hero{padding:70px 12px 32px}.hero .tag{font-size:0.68rem;padding:5px 12px}.hero h1{font-size:1.6rem}.hero .sub{font-size:0.85rem}.btn{padding:10px 18px;font-size:0.82rem}}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:40px}
+.stat{text-align:center;padding:16px 12px;background:var(--bg);border-radius:12px;border:1px solid var(--bg3)}
+.stat .n{font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--pl),var(--c));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat .l{font-size:0.72rem;color:var(--t2);margin-top:4px}
+@media(max-width:768px){.stats{grid-template-columns:repeat(2,1fr);gap:10px;margin-top:32px}.stat{padding:12px 8px}.stat .n{font-size:1.5rem}.stat .l{font-size:0.68rem}}
+@media(max-width:480px){.stats{gap:8px}.stat .n{font-size:1.3rem}}
+
+/* SECTION */
+section{padding:60px 0;background:var(--bg)}
+section:nth-child(even){background:var(--bg1)}
+.sh{text-align:center;margin-bottom:36px}
+.sh .ov{font-size:0.72rem;color:var(--p);text-transform:uppercase;letter-spacing:0.1em;font-weight:600;margin-bottom:6px}
+.sh h2{font-size:clamp(1.4rem,3.5vw,2.4rem);font-weight:800;margin-bottom:8px;color:var(--t)}
+.sh p{color:var(--t2);max-width:600px;margin:0 auto;font-size:0.88rem}
+@media(max-width:768px){section{padding:40px 0}.sh{margin-bottom:28px}.sh h2{font-size:1.4rem}.sh p{font-size:0.82rem}}
+@media(max-width:480px){section{padding:32px 0}.sh{margin-bottom:24px}.sh .ov{font-size:0.68rem}.sh h2{font-size:1.25rem}.sh p{font-size:0.78rem}}
+
+/* PAIN */
+.pain-g{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.pain{background:var(--bg);border:1px solid var(--bg3);border-radius:12px;padding:20px;transition:all 0.3s}
+.pain:hover{border-color:rgba(239,68,68,0.3);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.06)}
+.pain .ic{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,rgba(239,68,68,0.1),rgba(239,68,68,0.05));display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-weight:700;color:#ef4444;font-size:0.85rem}
+.pain h3{font-size:0.9rem;margin-bottom:5px;color:var(--t)}
+.pain p{font-size:0.8rem;color:var(--t2);line-height:1.6}
+@media(max-width:900px){.pain-g{grid-template-columns:repeat(2,1fr);gap:12px}}
+@media(max-width:480px){.pain-g{grid-template-columns:1fr;gap:10px}.pain{padding:16px}.pain .ic{width:32px;height:32px;font-size:0.8rem}.pain h3{font-size:0.85rem}.pain p{font-size:0.76rem}}
+
+/* ARCH */
+.arch{display:grid;grid-template-columns:1fr;gap:10px;max-width:680px;margin:0 auto}
+.al{background:var(--bg);border:1px solid var(--bg3);border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:12px;transition:all 0.2s}
+.al:hover{background:var(--bg1);border-color:var(--pl);box-shadow:0 4px 12px rgba(0,0,0,0.04)}
+.al .ix{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;flex-shrink:0}
+.al .inf h3{font-size:0.88rem;font-weight:600;color:var(--t)}
+.al .inf p{font-size:0.76rem;color:var(--t2)}
+@media(max-width:768px){.al{padding:14px 16px;gap:10px}.al .ix{width:28px;height:28px;font-size:0.75rem}.al .inf h3{font-size:0.82rem}.al .inf p{font-size:0.72rem}}
+.l1 .ix{background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.08));color:var(--p)}
+.l2 .ix{background:linear-gradient(135deg,rgba(8,145,178,0.15),rgba(8,145,178,0.08));color:var(--c)}
+.l3 .ix{background:linear-gradient(135deg,rgba(5,150,105,0.15),rgba(5,150,105,0.08));color:var(--ok)}
+.l4 .ix{background:linear-gradient(135deg,rgba(251,191,36,0.15),rgba(251,191,36,0.08));color:#f59e0b}
+
+/* SCREENSHOTS */
+.ss-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px}
+.ss-card{background:var(--bg);border:1px solid var(--bg3);border-radius:12px;overflow:hidden;transition:all 0.3s}
+.ss-card:hover{border-color:rgba(99,102,241,0.3);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.08)}
+.ss-card img{width:100%;display:block;object-fit:contain;background:var(--bg1)}
+.ss-full{max-width:700px;margin:0 auto 12px}
+@media(max-width:768px){.ss-row{gap:10px;margin-bottom:10px}.ss-card{border-radius:10px}.ss-full{margin:0 auto 10px}}
+@media(max-width:480px){.ss-row{grid-template-columns:1fr;gap:8px}.ss-card img{max-height:300px}}
+
+/* FEATURES */
+.fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.ft{background:var(--bg);border:1px solid var(--bg3);border-radius:12px;padding:24px;transition:all 0.3s;position:relative;overflow:hidden}
+.ft:hover{border-color:rgba(99,102,241,0.3);transform:translateY(-2px);box-shadow:0 10px 32px rgba(0,0,0,0.06)}
+.ft::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--p),var(--c));opacity:0;transition:opacity 0.3s}
+.ft:hover::before{opacity:1}
+.ft .ic{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-weight:700;font-size:0.9rem;color:#fff}
+.ft h3{font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--t)}
+.ft p{font-size:0.8rem;color:var(--t2);line-height:1.65}
+.ft .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.ft .tg{font-size:0.66rem;padding:3px 9px;border-radius:999px;background:var(--bg1);color:var(--p);border:1px solid rgba(99,102,241,0.15);font-weight:500}
+@media(max-width:768px){.fg{gap:12px}.ft{padding:20px}.ft .ic{width:36px;height:36px;font-size:0.85rem}.ft h3{font-size:0.92rem}.ft p{font-size:0.76rem}.ft .tg{font-size:0.64rem}}
+@media(max-width:480px){.fg{grid-template-columns:1fr}.ft{padding:18px}}
+
+/* NODES */
+.nodes{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:800px;margin:0 auto}
+.nd{background:var(--bg);border:1px solid var(--bg3);border-radius:8px;padding:8px 14px;font-size:0.78rem;font-weight:600;transition:all 0.2s;display:flex;align-items:center;gap:5px;color:var(--t)}
+.nd:hover{border-color:var(--p);transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,0.06)}
+.nd .d{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+@media(max-width:768px){.nodes{gap:6px}.nd{padding:6px 12px;font-size:0.72rem}.nd .d{width:6px;height:6px}.workflow-section{padding:30px 0!important}}
+@media(max-width:480px){.workflow-section{padding:24px 0!important}}
+
+/* SCENARIOS */
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.sc{background:var(--bg);border:1px solid var(--bg3);border-radius:14px;padding:24px 16px;text-align:center;transition:all 0.3s}
+.sc:hover{border-color:rgba(99,102,241,0.3);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.06)}
+.sc .ii{width:48px;height:48px;border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;color:#fff}
+.sc h3{font-size:0.9rem;font-weight:600;margin-bottom:4px;color:var(--t)}
+.sc p{font-size:0.72rem;color:var(--t2)}
+@media(max-width:900px){.sg{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.sg{grid-template-columns:1fr}}
+
+/* VERSIONS */
+.vg{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.vr{background:var(--bg);border:1px solid var(--bg3);border-radius:12px;padding:28px;position:relative;overflow:hidden}
+.vr.hot{border-color:var(--p);border-width:2px;box-shadow:0 8px 32px rgba(99,102,241,0.12)}
+.vr.hot::after{content:'推荐';position:absolute;top:14px;right:-32px;background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;padding:4px 40px;font-size:0.64rem;font-weight:700;transform:rotate(45deg)}
+.vr h3{font-size:1.15rem;font-weight:700;margin-bottom:5px;color:var(--t)}
+.vr .w{font-size:0.8rem;color:var(--c);margin-bottom:14px;font-weight:500}
+.vr ul{list-style:none}
+.vr li{padding:5px 0;font-size:0.8rem;color:var(--t2);display:flex;align-items:flex-start;gap:7px}
+.vr li::before{content:'✓';color:var(--ok);font-weight:700;flex-shrink:0}
+@media(max-width:768px){.vg{gap:12px}.vr{padding:22px}.vr h3{font-size:1.05rem}.vr .w{font-size:0.76rem;margin-bottom:12px}.vr li{font-size:0.76rem}}
+@media(max-width:480px){.vg{grid-template-columns:1fr}.vr{padding:18px}}
+
+/* ADVANTAGES */
+.adv-l{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;max-width:900px;margin:0 auto}
+.adv{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bg3);border-radius:10px;padding:14px 16px;font-size:0.82rem;color:var(--t)}
+.adv:hover{border-color:rgba(99,102,241,0.2);background:var(--bg1)}
+.adv .ck{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,rgba(5,150,105,0.15),rgba(5,150,105,0.08));display:flex;align-items:center;justify-content:center;color:var(--ok);font-weight:700;font-size:0.82rem;flex-shrink:0}
+@media(max-width:768px){.adv-l{gap:8px}.adv{padding:12px 14px;font-size:0.78rem}.adv .ck{width:20px;height:20px;font-size:0.78rem}}
+@media(max-width:480px){.adv-l{grid-template-columns:1fr}}
+
+/* TECH */
+.tech{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.tp{background:var(--bg);border:1px solid var(--bg3);border-radius:999px;padding:7px 18px;font-size:0.78rem;font-weight:500;transition:all 0.2s;color:var(--t)}
+.tp:hover{border-color:var(--c);color:var(--c);box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+@media(max-width:768px){.tech{gap:6px}.tp{padding:6px 14px;font-size:0.72rem}}
+@media(max-width:480px){.tp{padding:5px 12px;font-size:0.68rem}}
+
+/* DELIVER */
+.dg{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.dl{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--bg3);border-radius:10px;padding:12px 16px;transition:all 0.2s}
+.dl:hover{border-color:rgba(99,102,241,0.2);background:var(--bg1)}
+.dl .ii{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:700;color:#fff;flex-shrink:0}
+.dl .nm{font-size:0.82rem;font-weight:600;color:var(--t)}
+@media(max-width:900px){.dg{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.dg{grid-template-columns:repeat(2,1fr);gap:8px}.dl{padding:10px 14px;gap:8px}.dl .ii{width:28px;height:28px;font-size:0.8rem}.dl .nm{font-size:0.78rem}}
+
+/* DEMO */
+.demo{background:linear-gradient(135deg,rgba(99,102,241,0.03),rgba(8,145,178,0.03));border:2px solid rgba(99,102,241,0.15);border-radius:16px;padding:40px 24px;text-align:center;max-width:660px;margin:0 auto}
+.demo h3{font-size:1.4rem;font-weight:700;margin-bottom:6px;color:var(--t)}
+.demo .su{color:var(--t2);margin-bottom:20px;font-size:0.9rem}
+.db{background:var(--bg);border:1px solid var(--bg3);border-radius:12px;padding:18px 20px;text-align:left;font-family:'JetBrains Mono','Fira Code',monospace;font-size:0.8rem;line-height:1.9;max-width:460px;margin:0 auto 18px}
+.db .k{color:var(--p);font-weight:600}
+.db .v{color:var(--ok)}
+.demo .nt{font-size:0.76rem;color:var(--t3)}
+@media(max-width:768px){.demo{padding:32px 20px;border-radius:14px}.demo h3{font-size:1.25rem}.demo .su{font-size:0.85rem;margin-bottom:16px}.db{padding:14px 16px;font-size:0.76rem;line-height:1.8;margin-bottom:14px}.demo .nt{font-size:0.72rem}}
+@media(max-width:480px){.demo{padding:24px 16px;margin:0 8px}.demo h3{font-size:1.15rem}.db{padding:12px 14px;font-size:0.72rem}}
+
+/* FOOTER */
+footer{text-align:center;padding:40px 20px;color:var(--t3);font-size:0.76rem;border-top:1px solid var(--bg3);background:var(--bg1)}
+footer .tl{font-size:0.9rem;color:var(--t2);margin-bottom:6px;font-weight:600}
+@media(max-width:640px){.fg,.vg{grid-template-columns:1fr}.sg{grid-template-columns:repeat(2,1fr)}.ss-row{grid-template-columns:1fr}footer{padding:32px 16px}footer .tl{font-size:0.85rem}}
+@media(max-width:480px){footer{padding:28px 12px;font-size:0.72rem}footer .tl{font-size:0.82rem}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav><div class="in">
+    <div class="logo"><span>AI 知识助手平台</span></div>
+    <div class="links">
+        <a href="#pain">痛点</a>
+        <a href="#shots">产品截图</a>
+        <a href="#features">能力</a>
+        <a href="#scenarios">场景</a>
+        <a href="#versions">版本</a>
+        <a href="#demo">演示</a>
+    </div>
+</div></nav>
+
+<!-- HERO -->
+<section class="hero"><div class="hero-c">
+    <div class="tag">可装配 · 可交付 · 可迭代的企业 AI 应用平台</div>
+    <h1>不只是<span class="g">聊天页面</span><br>是一整套企业 AI 底座</h1>
+    <p class="sub">多智能体 × 多租户 RAG × 可视化工作流 × MCP 接入<br><strong>解决企业真正的 AI 落地问题：</strong>怎么拆角色、怎么编排流程、怎么交付客户、怎么持续运营</p>
+    <div class="hero-btns">
+        <a href="#demo" class="btn btn-p">在线体验</a>
+        <a href="#shots" class="btn btn-g">查看产品截图</a>
+    </div>
+    <div class="stats">
+        <div class="stat"><div class="n">9+</div><div class="l">核心能力模块</div></div>
+        <div class="stat"><div class="n">14</div><div class="l">工作流节点类型</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">端（前台+租户+平台）</div></div>
+        <div class="stat"><div class="n">10</div><div class="l">完整文档体系</div></div>
+    </div>
+</div></section>
+
+<!-- PAIN -->
+<section id="pain"><div class="container">
+    <div class="sh"><div class="ov">为什么需要这套系统</div><h2>企业在用大模型时的真实痛点</h2><p>不是"能不能回答"的问题，而是怎么在真实业务里用起来</p></div>
+    <div class="pain-g">
+        <div class="pain"><div class="ic">01</div><h3>一个总机器人打天下</h3><p>无法按业务拆分角色，所有问题塞给一个助手，回答混乱不可控</p></div>
+        <div class="pain"><div class="ic">02</div><h3>知识库杂乱难维护</h3><p>文档越来越多，没有分类、标签、切片管理，后期维护成本极高</p></div>
+        <div class="pain"><div class="ic">03</div><h3>只能问答，不能执行</h3><p>只能做简单对话，无法把业务流程自动化，无法调用企业内部接口</p></div>
+        <div class="pain"><div class="ic">04</div><h3>接不进企业内部系统</h3><p>无法对接 ERP、CRM、OA 等业务系统，AI 变成了信息孤岛</p></div>
+        <div class="pain"><div class="ic">05</div><h3>出了问题无从排查</h3><p>没有日志、没有调试、没有评测，效果好不好全靠感觉</p></div>
+        <div class="pain"><div class="ic">06</div><h3>私有化交付困难</h3><p>后台不完整，客户接手难，交付质量全靠开发个人能力</p></div>
+    </div>
+</div></section>
+
+<!-- ARCHITECTURE -->
+<section><div class="container">
+    <div class="sh"><div class="ov">系统架构</div><h2>四层结构，职责分明</h2><p>从用户到技术底座，每一层都可独立配置和扩展</p></div>
+    <div class="arch">
+        <div class="al l1"><div class="ix">01</div><div class="inf"><h3>前台使用层</h3><p>登录页 · 聊天页 · 独立智能体入口 — 面向最终用户</p></div></div>
+        <div class="al l2"><div class="ix">02</div><div class="inf"><h3>租户配置层</h3><p>智能体管理 · 工作流 · 知识资产 · 模型与工具 · 日志评测 — 面向企业管理员</p></div></div>
+        <div class="al l3"><div class="ix">03</div><div class="inf"><h3>平台管理层</h3><p>租户管理 · 平台统计 · 总日志 · 多客户观测 — 面向服务商（服务商版）</p></div></div>
+        <div class="al l4"><div class="ix">04</div><div class="inf"><h3>系统底座层</h3><p>模型调用 · 检索链路 · 工作流运行时 · 数据库 · 文件解析 · 认证权限</p></div></div>
+    </div>
+</div></section>
+
+<!-- ==================== 产品截图 ==================== -->
+<section id="shots"><div class="container">
+    <div class="sh"><div class="ov">产品实机截图</div><h2>所见即所得</h2><p>三端齐全，不只是一个对话页面</p></div>
+
+    <!-- 产品截图展示 -->
+    <div class="ss-row">
+        <div class="ss-card">
+            <img src="images/screenshot-01.jpg" alt="产品截图01" loading="lazy">
+        </div>
+        <div class="ss-card">
+            <img src="images/screenshot-02.jpg" alt="产品截图02" loading="lazy">
+        </div>
+    </div>
+
+    <div class="ss-row">
+        <div class="ss-card">
+            <img src="images/screenshot-03.jpg" alt="产品截图03" loading="lazy">
+        </div>
+        <div class="ss-card">
+            <img src="images/screenshot-04.jpg" alt="产品截图04" loading="lazy">
+        </div>
+    </div>
+
+    <div class="ss-row">
+        <div class="ss-card">
+            <img src="images/screenshot-05.jpg" alt="产品截图05" loading="lazy">
+        </div>
+        <div class="ss-card">
+            <img src="images/screenshot-06.jpg" alt="产品截图06" loading="lazy">
+        </div>
+    </div>
+
+    <div class="ss-row">
+        <div class="ss-card">
+            <img src="images/screenshot-07.jpg" alt="产品截图07" loading="lazy">
+        </div>
+        <div class="ss-card">
+            <img src="images/screenshot-08.jpg" alt="产品截图08" loading="lazy">
+        </div>
+    </div>
+
+    <div class="ss-full">
+        <div class="ss-card">
+            <img src="images/screenshot-09.jpg" alt="产品截图09" loading="lazy">
+        </div>
+    </div>
+</div></section>
+
+<!-- CORE FEATURES -->
+<section id="features"><div class="container">
+    <div class="sh"><div class="ov">核心能力</div><h2>不是功能堆砌，是解决真实问题的能力组合</h2></div>
+    <div class="fg">
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">01</div><h3>多智能体</h3><p>一个租户配置多个智能体，每个独立设定：角色定位、Prompt、模型、知识范围、工具、MCP 服务、工作流。不同业务拆成不同助手，而非混用一个总机器人。</p><div class="tags"><span class="tg">独立Prompt</span><span class="tg">独立知识</span><span class="tg">独立模型</span><span class="tg">独立工作流</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#0891b2,#0e7490)">02</div><h3>可视化工作流</h3><p>14 种节点自由组合：AI 生成、知识检索、条件判断、HTTP 请求、脚本执行、MCP 调用、循环、并行、子流程、通知推送、延时、表单…把"问答"扩展成"业务执行"。</p><div class="tags"><span class="tg">条件分支</span><span class="tg">并行处理</span><span class="tg">子流程复用</span><span class="tg">HTTP调用</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#059669,#047857)">03</div><h3>多租户隔离</h3><p>一套系统服务多个企业客户。每个租户独立后台、品牌、知识库、模型配置、工作流。品牌+数据+配置三重隔离，适合 SaaS 运营和项目持续交付。</p><div class="tags"><span class="tg">品牌隔离</span><span class="tg">数据隔离</span><span class="tg">配置隔离</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#f59e0b,#d97706)">04</div><h3>结构化知识管理</h3><p>知识库 → 分类 → 标签 → 文件，四级结构适合企业长期维护。支持多格式上传、网页导入、切片预览、按标签精细筛选。</p><div class="tags"><span class="tg">多知识库</span><span class="tg">标签管理</span><span class="tg">切片预览</span><span class="tg">网页导入</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#ec4899,#db2777)">05</div><h3>完整 RAG 检索链路</h3><p>文档解析 → 文本抽取 → 切片 → 向量检索+关键词检索 → 混合召回 → Rerank 精排 → Query 改写。远超"简单喂文档给模型"的效果。</p><div class="tags"><span class="tg">混合检索</span><span class="tg">Rerank重排</span><span class="tg">Query改写</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)">06</div><h3>MCP 与工具接入</h3><p>后台配置工具和 MCP 服务，智能体与工作流均可调用。查业务数据、调内部接口、执行操作、读外部系统 — AI 不只是"回答"，还能"做事"。</p><div class="tags"><span class="tg">MCP协议</span><span class="tg">工具调用</span><span class="tg">系统打通</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#0891b2,#0e7490)">07</div><h3>图文问答</h3><p>支持纯文本、图片上传、文字+图片混合提问。模型自动识别类型，不支持图文的模型自动限制上传入口。适合报告解读、票据识别、表单分析。</p><div class="tags"><span class="tg">图片上传</span><span class="tg">自动识别</span><span class="tg">报告解读</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#059669,#047857)">08</div><h3>运行观测与统计</h3><p>聊天日志、请求日志、护栏事件、评测记录、调度记录、爬虫记录、租户/平台统计报表。交付后持续优化有据可依。</p><div class="tags"><span class="tg">日志追踪</span><span class="tg">效果评测</span><span class="tg">统计报表</span></div></div>
+        <div class="ft"><div class="ic" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">09</div><h3>三端齐全</h3><p>平台后台（服务商版）+ 租户后台 + 前台聊天页。完整后台体系，不是只有一个对话页面，可直接交付，客户接手无障碍。</p><div class="tags"><span class="tg">平台后台</span><span class="tg">租户后台</span><span class="tg">前台聊天</span></div></div>
+    </div>
+</div></section>
+
+<!-- WORKFLOW NODES -->
+<section style="padding:40px 0" class="workflow-section"><div class="container">
+    <div class="sh"><div class="ov">工作流节点</div><h2>14 种节点，自由组合业务流程</h2><p>从"能回答"到"能执行"的关键能力</p></div>
+    <div class="nodes">
+        <div class="nd"><div class="d" style="background:#059669"></div>start</div>
+        <div class="nd"><div class="d" style="background:#6366f1"></div>ai</div>
+        <div class="nd"><div class="d" style="background:#0891b2"></div>knowledge</div>
+        <div class="nd"><div class="d" style="background:#f59e0b"></div>condition</div>
+        <div class="nd"><div class="d" style="background:#ef4444"></div>http</div>
+        <div class="nd"><div class="d" style="background:#8b5cf6"></div>script</div>
+        <div class="nd"><div class="d" style="background:#059669"></div>notify</div>
+        <div class="nd"><div class="d" style="background:#fb923c"></div>mcp</div>
+        <div class="nd"><div class="d" style="background:#0ea5e9"></div>delay</div>
+        <div class="nd"><div class="d" style="background:#d946ef"></div>form</div>
+        <div class="nd"><div class="d" style="background:#059669"></div>parallel</div>
+        <div class="nd"><div class="d" style="background:#6366f1"></div>loop</div>
+        <div class="nd"><div class="d" style="background:#0891b2"></div>subflow</div>
+        <div class="nd"><div class="d" style="background:#94a3b8"></div>end</div>
+    </div>
+</div></section>
+
+<!-- SCENARIOS -->
+<section id="scenarios"><div class="container">
+    <div class="sh"><div class="ov">业务场景</div><h2>一个平台，多种业务可能</h2><p>覆盖企业知识问答、客服、培训、医疗、政务、自动化等真实场景</p></div>
+    <div class="sg">
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">S1</div><h3>企业制度问答</h3><p>流程规范 · 岗位手册 · 培训文档</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#0891b2,#0e7490)">S2</div><h3>客服/售前/售后</h3><p>标准答复 · 问题引导 · 接口联动</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#059669,#047857)">S3</div><h3>培训答疑</h3><p>新员工培训 · 业务制度 · 流程指引</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#f59e0b,#d97706)">S4</div><h3>合同与文档</h3><p>合同摘要 · 条款提取 · 风险提示</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#ec4899,#db2777)">S5</div><h3>医疗专业服务</h3><p>报告解读 · 政策说明 · 表单分析</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)">S6</div><h3>业务流程自动化</h3><p>审批流 · 表单处理 · 通知推送</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#0ea5e9,#0284c7)">S7</div><h3>政务与公共事业</h3><p>政策问答 · 办事指引 · 便民服务</p></div>
+        <div class="sc"><div class="ii" style="background:linear-gradient(135deg,#ef4444,#dc2626)">S8</div><h3>制造与工业</h3><p>设备助手 · 售后助手 · 工艺问答</p></div>
+    </div>
+</div></section>
+
+<!-- VERSIONS -->
+<section id="versions"><div class="container">
+    <div class="sh"><div class="ov">版本选择</div><h2>双版本，按需匹配</h2></div>
+    <div class="vg">
+        <div class="vr">
+            <h3>企业版</h3><div class="w">适合自用 · 学习 · 轻量部署</div>
+            <ul><li>单后台结构，部署更轻</li><li>可改品牌、配模型、配知识库</li><li>配置工作流，接业务接口</li><li>源码 + 启动脚本 + 部署文档</li><li>使用教程 + 工作流说明</li><li>数据库文档 + API 文档</li><li>二次开发说明</li></ul>
+        </div>
+        <div class="vr hot">
+            <h3>服务商版</h3><div class="w">适合交付 · SaaS 运营 · 多客户</div>
+            <ul><li>平台后台 + 租户后台双后台</li><li>多租户架构，支持客户隔离</li><li>品牌隔离 / 知识库隔离 / 模型隔离</li><li>工作流隔离，独立配置</li><li>平台级统计报表与总日志</li><li>适合持续交付与托管运营</li><li>适合软件公司 & 实施团队 & 私有化交付</li></ul>
+        </div>
+    </div>
+</div></section>
+
+<!-- ADVANTAGES -->
+<section><div class="container">
+    <div class="sh"><div class="ov">产品优势</div><h2>为什么选择这套系统</h2><p>不是空壳 Demo，是能交付的完整产品</p></div>
+    <div class="adv-l">
+        <div class="adv"><div class="ck">✓</div>不是空壳聊天页，有完整后台和配置体系</div>
+        <div class="adv"><div class="ck">✓</div>多智能体能力完整，可按业务拆分角色</div>
+        <div class="adv"><div class="ck">✓</div>工作流能力强，14种节点覆盖真实业务</div>
+        <div class="adv"><div class="ck">✓</div>知识管理结构清晰，适合企业长期维护</div>
+        <div class="adv"><div class="ck">✓</div>MCP 和工具可扩展，能接企业内部系统</div>
+        <div class="adv"><div class="ck">✓</div>图文问答已打通，支持报告/票据/表单识别</div>
+        <div class="adv"><div class="ck">✓</div>日志、评测、统计较完整，效果可量化</div>
+        <div class="adv"><div class="ck">✓</div>文档体系完整，11份文档覆盖各环节</div>
+        <div class="adv"><div class="ck">✓</div>服务商版适合做多客户持续交付</div>
+    </div>
+</div></section>
+
+<!-- TECH -->
+<section><div class="container">
+    <div class="sh"><div class="ov">技术栈</div><h2>务实选型，稳定可靠</h2></div>
+    <div class="tech">
+        <div class="tp">Python</div><div class="tp">FastAPI</div><div class="tp">SQLite</div><div class="tp">LangGraph</div><div class="tp">Qdrant</div><div class="tp">SSE 流式输出</div><div class="tp">HTML / JavaScript</div><div class="tp">TailwindCSS</div><div class="tp">MCP 协议</div><div class="tp">Rerank 重排</div><div class="tp">Embedding</div>
+    </div>
+</div></section>
+
+<!-- DELIVERABLES -->
+<section><div class="container">
+    <div class="sh"><div class="ov">交付内容</div><h2>买回去直接能跑，也能继续二开</h2></div>
+    <div class="dg">
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">D1</div><div class="nm">完整源码</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#0891b2,#0e7490)">D2</div><div class="nm">启动脚本</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#059669,#047857)">D3</div><div class="nm">部署文档</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#f59e0b,#d97706)">D4</div><div class="nm">使用教程</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#ec4899,#db2777)">D5</div><div class="nm">工作流说明</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)">D6</div><div class="nm">MCP接入说明</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#0ea5e9,#0284c7)">D7</div><div class="nm">数据库文档</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#ef4444,#dc2626)">D8</div><div class="nm">API 文档</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">D9</div><div class="nm">二开说明</div></div>
+        <div class="dl"><div class="ii" style="background:linear-gradient(135deg,#0891b2,#0e7490)">D10</div><div class="nm">运维排障手册</div></div>
+    </div>
+</div></section>
+
+<!-- DEMO -->
+<section id="demo"><div class="container">
+    <div class="demo">
+        <h3>在线体验</h3>
+        <p class="su">所见即所得，实际体验产品效果</p>
+        <div class="db">
+            <div><span class="k">演示地址：</span><span class="v">http://82.156.154.185/tenant</span></div>
+            <div><span class="k">账　　号：</span><span class="v">tenant_huadong_hospital</span></div>
+            <div><span class="k">密　　码：</span><span class="v">Hospital2026!</span></div>
+        </div>
+        <p class="nt">如果模型未配置，可在设置中自行配置</p>
+    </div>
+</div></section>
+
+<!-- FOOTER -->
+<footer>
+    <div class="tl">可装配 · 可交付 · 可迭代的企业 AI 应用平台</div>
+    <p>Python + FastAPI + LangGraph + Qdrant · 多租户 · 多智能体 · RAG · 工作流 · MCP</p>
+</footer>
+
+</body>
+</html>

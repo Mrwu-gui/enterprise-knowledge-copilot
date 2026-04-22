@@ -61,6 +61,8 @@ PAGE_MERGE_MAX_CHARS = 2200
 SEMANTIC_CHUNK_MIN_CHARS = 220
 SEMANTIC_CHUNK_TARGET_CHARS = 720
 SEMANTIC_CHUNK_MAX_CHARS = 1080
+SEMANTIC_OVERLAP_MIN_CHARS = 40
+SEMANTIC_OVERLAP_MAX_CHARS = 140
 TABLE_BATCH_SIZE = 40
 
 TIER_ALIAS = {
@@ -950,7 +952,7 @@ def _split_markdown_sections(markdown_text: str) -> list[Document]:
 
 
 def _split_sentences(text: str) -> list[str]:
-    parts = re.split(r"(?<=[。！？!?；;])\s+|\n{2,}", text)
+    parts = re.split(r"(?<=[。！？!?；;])(?:\s+|(?=[^\s]))|\n{2,}", text)
     sentences = [part.strip() for part in parts if part and part.strip()]
     if sentences:
         return sentences
@@ -960,6 +962,44 @@ def _split_sentences(text: str) -> list[str]:
 def _tokenize_for_similarity(text: str) -> set[str]:
     tokens = re.findall(r"[\u4e00-\u9fff]{1,4}|[A-Za-z0-9_]{2,}", text.lower())
     return set(tokens)
+
+
+def _estimate_semantic_overlap_chars(content: str, sentences: list[str], metadata: dict | None = None) -> int:
+    text_len = len(content)
+    sentence_count = len(sentences)
+    heading_path = str((metadata or {}).get("heading_path") or "").strip()
+    heading_depth = heading_path.count(" > ") + 1 if heading_path else 0
+    base = 60
+    if text_len >= 1800:
+        base += 20
+    if text_len >= 3200:
+        base += 20
+    if sentence_count >= 10:
+        base += 10
+    if sentence_count >= 18:
+        base += 10
+    if heading_depth <= 1:
+        base += 10
+    if re.search(r"[：:；;]", content):
+        base += 10
+    return max(SEMANTIC_OVERLAP_MIN_CHARS, min(SEMANTIC_OVERLAP_MAX_CHARS, base))
+
+
+def _build_overlap_tail(sentences: list[str], overlap_chars: int) -> tuple[list[str], set[str], int]:
+    if not sentences or overlap_chars <= 0:
+        return [], set(), 0
+    selected: list[str] = []
+    total = 0
+    for sentence in reversed(sentences):
+        sentence = str(sentence or "").strip()
+        if not sentence:
+            continue
+        selected.insert(0, sentence)
+        total += len(sentence)
+        if total >= overlap_chars:
+            break
+    merged = "\n".join(selected).strip()
+    return selected, _tokenize_for_similarity(merged), len(merged)
 
 
 def _semantic_split_document(doc: Document) -> list[Document]:
@@ -978,6 +1018,8 @@ def _semantic_split_document(doc: Document) -> list[Document]:
         return []
 
     chunks: list[Document] = []
+    metadata = dict(doc.metadata or {})
+    overlap_chars = _estimate_semantic_overlap_chars(content, sentences, metadata)
     current_sentences: list[str] = []
     current_tokens: set[str] = set()
     current_len = 0
@@ -986,10 +1028,13 @@ def _semantic_split_document(doc: Document) -> list[Document]:
         nonlocal current_sentences, current_tokens, current_len
         chunk_text = "\n".join(current_sentences).strip()
         if chunk_text:
-            chunks.append(Document(page_content=chunk_text, metadata=dict(doc.metadata or {})))
-        current_sentences = []
-        current_tokens = set()
-        current_len = 0
+            chunk_meta = dict(metadata)
+            chunk_meta["chunk_overlap_chars"] = overlap_chars
+            chunks.append(Document(page_content=chunk_text, metadata=chunk_meta))
+        overlap_tail, overlap_tokens, overlap_len = _build_overlap_tail(current_sentences, overlap_chars)
+        current_sentences = overlap_tail
+        current_tokens = overlap_tokens
+        current_len = overlap_len
 
     for sentence in sentences:
         sentence_tokens = _tokenize_for_similarity(sentence)
@@ -1012,7 +1057,11 @@ def _semantic_split_document(doc: Document) -> list[Document]:
         current_tokens |= sentence_tokens
         current_len += sentence_len
 
-    flush()
+    chunk_text = "\n".join(current_sentences).strip()
+    if chunk_text:
+        chunk_meta = dict(metadata)
+        chunk_meta["chunk_overlap_chars"] = overlap_chars
+        chunks.append(Document(page_content=chunk_text, metadata=chunk_meta))
     return chunks
 
 

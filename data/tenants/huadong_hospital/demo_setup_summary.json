@@ -1,0 +1,139 @@
+{
+  "tenant_id": "huadong_hospital",
+  "tenant_name": "华东协同医院",
+  "admin_username": "tenant_huadong_hospital",
+  "admin_password": "Hospital2026!",
+  "demo_phone": "13800001234",
+  "demo_phone_password": "HospitalChat2026!",
+  "agents": [
+    {
+      "agent_id": "agent_report_interpreter",
+      "name": "报告解读助手",
+      "workflow_id": "wf_report_interpreter"
+    },
+    {
+      "agent_id": "agent_diagnosis_assistant",
+      "name": "辅助诊断助手",
+      "workflow_id": "wf_diagnosis_assistant"
+    },
+    {
+      "agent_id": "agent_appointment_assistant",
+      "name": "智能预约助手",
+      "workflow_id": "wf_appointment_assistant"
+    },
+    {
+      "agent_id": "agent_infection_control",
+      "name": "传染病防控助手",
+      "workflow_id": "wf_infection_control"
+    },
+    {
+      "agent_id": "agent_vaccine_assistant",
+      "name": "疫苗接种助手",
+      "workflow_id": "wf_vaccine_assistant"
+    },
+    {
+      "agent_id": "agent_elderly_care",
+      "name": "老年健康助手",
+      "workflow_id": "wf_elderly_care"
+    },
+    {
+      "agent_id": "agent_oral_health",
+      "name": "口腔健康助手",
+      "workflow_id": "wf_oral_health"
+    },
+    {
+      "agent_id": "agent_ophthalmology",
+      "name": "眼科健康助手",
+      "workflow_id": "wf_ophthalmology"
+    },
+    {
+      "agent_id": "agent_sleep_health",
+      "name": "睡眠健康助手",
+      "workflow_id": "wf_sleep_health"
+    },
+    {
+      "agent_id": "agent_rehab_training",
+      "name": "康复训练助手",
+      "workflow_id": "wf_rehab_training"
+    },
+    {
+      "agent_id": "agent_tcm_wellness",
+      "name": "中医养生助手",
+      "workflow_id": "wf_tcm_wellness"
+    },
+    {
+      "agent_id": "agent_insurance_rules",
+      "name": "医保规则助手",
+      "workflow_id": "wf_insurance_rules"
+    }
+  ],
+  "knowledge_libraries": [
+    {
+      "library_id": "kb_report_interpreter",
+      "name": "报告解读知识库",
+      "description": "面向检验单、影像结论和复查建议的解释型知识库。"
+    },
+    {
+      "library_id": "kb_diagnosis_assistant",
+      "name": "辅助诊断知识库",
+      "description": "面向症状分层、就诊科室建议和临床路径提醒的分诊知识库。"
+    },
+    {
+      "library_id": "kb_appointment_assistant",
+      "name": "智能预约知识库",
+      "description": "面向门诊、检查、复诊与医保预约规则的导诊知识库。"
+    },
+    {
+      "library_id": "kb_infection_control",
+      "name": "传染病防控知识库",
+      "description": "面向院感上报、隔离要求和发热病例处置的防控知识库。"
+    },
+    {
+      "library_id": "kb_vaccine_assistant",
+      "name": "疫苗接种知识库",
+      "description": "面向儿童、成人和重点人群接种前咨询的接种知识库。"
+    },
+    {
+      "library_id": "kb_elderly_care",
+      "name": "老年健康知识库",
+      "description": "面向老年慢病管理、跌倒风险和复诊提醒的慢病知识库。"
+    },
+    {
+      "library_id": "kb_oral_health",
+      "name": "口腔健康知识库",
+      "description": "面向牙痛、洁牙、种植修复和术后注意事项的口腔知识库。"
+    },
+    {
+      "library_id": "kb_ophthalmology",
+      "name": "眼科健康知识库",
+      "description": "面向视力异常、红眼、干眼与术后复查的眼科知识库。"
+    },
+    {
+      "library_id": "kb_sleep_health",
+      "name": "睡眠健康知识库",
+      "description": "面向失眠、睡眠呼吸暂停和睡眠监测准备的睡眠医学知识库。"
+    },
+    {
+      "library_id": "kb_rehab_training",
+      "name": "康复训练知识库",
+      "description": "面向术后康复、骨关节训练和居家锻炼提醒的康复知识库。"
+    },
+    {
+      "library_id": "kb_tcm_wellness",
+      "name": "中医养生知识库",
+      "description": "面向四时调养、体质辨识和中医门诊准备的中医知识库。"
+    },
+    {
+      "library_id": "kb_insurance_rules",
+      "name": "医保规则知识库",
+      "description": "面向医保材料、备案、门诊结算与人工复核口径的医保知识库。"
+    }
+  ],
+  "workflow_count": 12,
+  "indexed_chunks": 132,
+  "remaining_gaps": [
+    "正式医保、临床路径、药品目录服务目前接的是本地 mock MCP bridge；生产环境需替换成真实医院接口。",
+    "如需院内 AD/LDAP、科室级 RBAC、操作审计与实名脱敏，还需补企业级权限与合规能力。",
+    "如果要做和截图一致的“智能体广场卡片运营后台”，当前已有多 agent 切换能力，但卡片化运营装修仍可继续增强。"
+  ]
+}

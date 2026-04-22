@@ -38,6 +38,7 @@ except Exception:  # pragma: no cover - 允许依赖未安装时回退
 
 class ChatWorkflowState(TypedDict, total=False):
     question: str
+    images: list[dict]
     cache_key: str
     phone: str
     tenant_id: str
@@ -227,7 +228,12 @@ def _retrieve_node(state: ChatWorkflowState) -> ChatWorkflowState:
     backend = str(route.get("backend") or "hybrid")
     rag_results = annotate_retrieval_results_with_scope(
         tenant_id=state.get("tenant_id", "default"),
-        results=rag_runtime.search(question, top_k=scoped_top_k, backend_override=backend),
+        results=rag_runtime.search(
+            question,
+            top_k=scoped_top_k,
+            backend_override=backend,
+            knowledge_scope=state.get("knowledge_scope") or {},
+        ),
         knowledge_scope=state.get("knowledge_scope") or {},
     )[:top_k]
     judge = judge_retrieval_quality(rag_results, retrieval_config)
@@ -265,7 +271,12 @@ def _retrieve_node(state: ChatWorkflowState) -> ChatWorkflowState:
             stage_requested_top_k = max(stage_top_k, 12) if state.get("knowledge_scope") else stage_top_k
             rag_results = annotate_retrieval_results_with_scope(
                 tenant_id=state.get("tenant_id", "default"),
-                results=rag_runtime.search(stage_query, top_k=stage_requested_top_k, backend_override=stage_backend),
+                results=rag_runtime.search(
+                    stage_query,
+                    top_k=stage_requested_top_k,
+                    backend_override=stage_backend,
+                    knowledge_scope=state.get("knowledge_scope") or {},
+                ),
                 knowledge_scope=state.get("knowledge_scope") or {},
             )[:stage_top_k]
             judge = judge_retrieval_quality(rag_results, retrieval_config)
@@ -411,6 +422,7 @@ def _model_route_node(state: ChatWorkflowState) -> ChatWorkflowState:
                     "provider_id": str(item.get("id") or f"provider_{index + 1}"),
                     "provider_label": str(item.get("label") or item.get("name") or f"供应商 {index + 1}"),
                     "base_url": str(item.get("base_url") or "").strip(),
+                    "supports_image": bool(item.get("supports_image")),
                     "api_keys": list(item.get("api_keys") or []),
                     "model_route": deduped_route,
                 }
@@ -440,6 +452,7 @@ async def _generate_answer_node(state: ChatWorkflowState) -> ChatWorkflowState:
 
     async for line in stream_chat_completion(
         question=state.get("question", ""),
+        images=state.get("images") or [],
         system_prompt=state.get("system_prompt", ""),
         model_settings=state.get("model_settings") or load_model_config(),
         workflow_route=state.get("model_route") or [],
@@ -498,6 +511,11 @@ def build_knowledge_hits(rag_results: list[dict] | None) -> list[dict]:
             "title": item.get("title", ""),
             "tier": item.get("tier", ""),
             "tier_label": item.get("tier_label", ""),
+            "library_id": item.get("library_id", ""),
+            "library_name": item.get("library_name", ""),
+            "category_id": item.get("category_id", ""),
+            "category_name": item.get("category_name", ""),
+            "file_key": item.get("file_key", ""),
             "tags": item.get("tags") or [],
             "score": item.get("score", 0),
             "rerank_score": item.get("rerank_score"),
@@ -689,16 +707,20 @@ _compiled_graph = _build_langgraph() if LANGGRAPH_AVAILABLE and StateGraph is no
 async def run_chat_workflow(
     question: str,
     phone: str,
+    images: list[dict] | None = None,
     cache_key: str | None = None,
     tenant_id: str = "default",
     agent_id: str = "",
     session_id: str = "",
     request_id: str = "",
     llm_context: dict | None = None,
+    skip_cache_lookup: bool = False,
+    skip_cache_write: bool = False,
 ) -> dict[str, Any]:
     """运行聊天主链路，LangGraph 可用时走编排框架。"""
     return await run_chat_workflow_with_runtime(
         question=question,
+        images=images,
         phone=phone,
         cache_key=cache_key,
         tenant_id=tenant_id,
@@ -706,12 +728,15 @@ async def run_chat_workflow(
         session_id=session_id,
         request_id=request_id,
         llm_context=llm_context,
+        skip_cache_lookup=skip_cache_lookup,
+        skip_cache_write=skip_cache_write,
     )
 
 
 async def run_chat_workflow_with_runtime(
     *,
     question: str,
+    images: list[dict] | None = None,
     phone: str,
     cache_key: str | None = None,
     tenant_id: str = "default",
@@ -733,6 +758,7 @@ async def run_chat_workflow_with_runtime(
     """运行聊天主链路，并允许外部注入租户级运行时依赖。"""
     initial_state: ChatWorkflowState = {
         "question": question,
+        "images": list(images or []),
         "cache_key": cache_key or question,
         "phone": phone,
         "tenant_id": tenant_id,
@@ -767,7 +793,7 @@ async def run_chat_workflow_with_runtime(
         "mcp_servers": mcp_servers or [],
         "log_chat": log_chat,
         "skip_cache_lookup": skip_cache_lookup,
-        "skip_cache_write": skip_cache_write,
+        "skip_cache_write": skip_cache_write or bool(images),
         "phase_timings": {},
         "answer_events": [],
         "answer_text": "",

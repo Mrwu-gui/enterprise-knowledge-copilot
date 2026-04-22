@@ -114,7 +114,13 @@ def list_enabled_mcp_servers(tool_config: dict | None = None) -> list[dict]:
             {
                 "server_id": server_id,
                 "label": str(item.get("label") or server_id).strip(),
+                "transport": str(item.get("transport") or ("http" if (item.get("bridge_url") or item.get("url")) else "stdio")).strip().lower() or "http",
                 "bridge_url": str(item.get("bridge_url") or "").strip(),
+                "url": str(item.get("url") or item.get("bridge_url") or "").strip(),
+                "command": str(item.get("command") or "").strip(),
+                "args": item.get("args") if isinstance(item.get("args"), list) else [],
+                "env": item.get("env") if isinstance(item.get("env"), dict) else {},
+                "env_passthrough": item.get("env_passthrough") if isinstance(item.get("env_passthrough"), list) else [],
                 "auth_token": str(item.get("auth_token") or "").strip(),
                 "enabled": True,
                 "headers": item.get("headers") if isinstance(item.get("headers"), dict) else {},

@@ -27,6 +27,7 @@ DEFAULT_PROVIDER = {
     "base_url": LLM_BASE_URL,
     "model_primary": LLM_MODEL_PRIMARY,
     "model_fallback": LLM_MODEL_FALLBACK,
+    "supports_image": False,
     "api_keys": list(LLM_API_KEYS),
 }
 
@@ -92,6 +93,12 @@ def _normalize_provider(item: dict, index: int, fallback_keys: list[str]) -> dic
     base_url = str(item.get("base_url") or item.get("url") or LLM_BASE_URL).strip()
     primary = str(item.get("model_primary") or item.get("model") or LLM_MODEL_PRIMARY).strip()
     fallback = str(item.get("model_fallback") or item.get("fallback_model") or "").strip()
+    supports_image = _infer_supports_image(
+        model_name=primary or fallback,
+        base_url=base_url,
+        label=label,
+        explicit=item.get("supports_image"),
+    )
     raw_keys = item.get("api_keys")
     if isinstance(raw_keys, list):
         keys = _dedupe_keep_order([str(v).strip() for v in raw_keys if str(v).strip()])
@@ -106,6 +113,8 @@ def _normalize_provider(item: dict, index: int, fallback_keys: list[str]) -> dic
         "model_primary": primary,
         "model_fallback": fallback,
         "model": primary,
+        "supports_image": supports_image,
+        "capability_label": "图文" if supports_image else "文本",
         "api_keys": keys,
         "api_keys_text": "\n".join(keys),
     }
@@ -123,6 +132,7 @@ def _normalize_providers(data: dict, fallback_keys: list[str]) -> list[dict]:
         "base_url": str((data or {}).get("base_url") or LLM_BASE_URL).strip(),
         "model_primary": str((data or {}).get("model_primary") or LLM_MODEL_PRIMARY).strip(),
         "model_fallback": str((data or {}).get("model_fallback") or "").strip(),
+        "supports_image": _parse_supports_image((data or {}).get("supports_image")),
         "api_keys": list(fallback_keys),
     }
     return [_normalize_provider(legacy_provider, 0, fallback_keys)]
@@ -136,9 +146,123 @@ def _build_runtime_config(providers: list[dict]) -> dict:
         "model_primary": active.get("model_primary", ""),
         "model_fallback": active.get("model_fallback", ""),
         "model": active.get("model_primary", ""),
+        "supports_image": bool(active.get("supports_image")),
+        "capability_label": "图文" if bool(active.get("supports_image")) else "文本",
         "api_keys": all_keys,
         "providers": providers,
     }
+
+
+def _parse_supports_image(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (list, tuple, set)):
+        normalized = {str(item or "").strip().lower() for item in value}
+        return bool({"image", "vision", "multimodal", "image_text"} & normalized)
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "yes", "y", "on", "image", "vision", "multimodal", "image_text", "图文"}
+
+
+def _infer_supports_image(*, model_name: str = "", base_url: str = "", label: str = "", explicit: object = None) -> bool:
+    if explicit not in (None, ""):
+        return _parse_supports_image(explicit)
+    text = " ".join([str(model_name or ""), str(base_url or ""), str(label or "")]).strip().lower()
+    if not text:
+        return False
+    positive_keywords = [
+        "vision",
+        "image",
+        "multimodal",
+        "omni",
+        "vl",
+        "gpt-4o",
+        "gpt-4.1",
+        "o4",
+        "gemini",
+        "claude-3",
+        "claude-4",
+        "qwen-vl",
+        "qvq",
+        "internvl",
+        "llava",
+        "yi-vision",
+        "glm-4v",
+        "doubao-vision",
+        "kimi-vl",
+        "deepseek-vl",
+        "minicpm-v",
+    ]
+    negative_keywords = [
+        "deepseek-chat",
+        "deepseek-reasoner",
+        "text-embedding",
+        "embedding",
+        "rerank",
+        "bge-",
+        "qwen-max",
+        "qwen-plus",
+        "qwen-turbo",
+    ]
+    if any(keyword in text for keyword in negative_keywords):
+        return False
+    return any(keyword in text for keyword in positive_keywords)
+
+
+def provider_supports_image(provider: dict | None) -> bool:
+    if not isinstance(provider, dict):
+        return False
+    return _parse_supports_image(provider.get("supports_image"))
+
+
+def resolve_model_capability(model_settings: dict, model_name: str = "") -> dict:
+    providers = model_settings.get("providers") if isinstance(model_settings, dict) else None
+    clean_model = str(model_name or "").strip()
+    candidates = providers if isinstance(providers, list) else []
+    selected = None
+    if clean_model:
+        for provider in candidates:
+            primary = str(provider.get("model_primary") or provider.get("model") or "").strip()
+            fallback = str(provider.get("model_fallback") or "").strip()
+            if clean_model and clean_model in {primary, fallback}:
+                selected = provider
+                break
+    if not isinstance(selected, dict):
+        selected = candidates[0] if candidates else {}
+    supports_image = provider_supports_image(selected)
+    selected_model = clean_model or str(selected.get("model_primary") or selected.get("model") or "").strip()
+    return {
+        "model": selected_model,
+        "provider_id": str(selected.get("id") or "").strip(),
+        "provider_label": str(selected.get("label") or selected.get("name") or "").strip(),
+        "supports_image": supports_image,
+        "capability_label": "图文" if supports_image else "文本",
+    }
+
+
+def apply_model_selection(model_settings: dict, model_name: str = "") -> dict:
+    if not isinstance(model_settings, dict):
+        return _build_runtime_config([_normalize_provider(DEFAULT_PROVIDER, 0, list(LLM_API_KEYS))])
+    clean_model = str(model_name or "").strip()
+    providers = model_settings.get("providers") if isinstance(model_settings.get("providers"), list) else []
+    if not clean_model:
+        return _build_runtime_config([dict(item) for item in providers]) if providers else _build_runtime_config([])
+    filtered: list[dict] = []
+    for item in providers:
+        if not isinstance(item, dict):
+            continue
+        primary = str(item.get("model_primary") or item.get("model") or "").strip()
+        fallback = str(item.get("model_fallback") or "").strip()
+        if clean_model not in {primary, fallback}:
+            continue
+        next_item = dict(item)
+        next_item["model_primary"] = clean_model
+        next_item["model"] = clean_model
+        if fallback == clean_model:
+            next_item["model_fallback"] = ""
+        filtered.append(next_item)
+    if not filtered:
+        return _build_runtime_config([dict(item) for item in providers]) if providers else _build_runtime_config([])
+    return _build_runtime_config(filtered)
 
 
 def load_model_config(tenant_id: str | None = None, tenant_name: str = "") -> dict:
@@ -189,6 +313,7 @@ def save_model_config(
                 "base_url": provider["base_url"],
                 "model_primary": provider["model_primary"],
                 "model_fallback": provider.get("model_fallback", ""),
+                "supports_image": bool(provider.get("supports_image")),
                 "api_keys": provider["api_keys"],
             }
             for provider in providers

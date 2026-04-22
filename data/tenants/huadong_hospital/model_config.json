@@ -1,0 +1,18 @@
+{
+  "providers": [
+    {
+      "id": "provider_1",
+      "label": "deepseek",
+      "base_url": "https://api.deepseek.com/v1",
+      "model_primary": "deepseek-chat",
+      "model_fallback": "",
+      "api_keys": [
+        "sk-e0aa3877e32248d9a4470a343c3e2075",
+        "sk-ea2ab0c6a3504988afd86d532865f806"
+      ]
+    }
+  ],
+  "base_url": "https://api.deepseek.com/v1",
+  "model_primary": "deepseek-chat",
+  "model_fallback": ""
+}

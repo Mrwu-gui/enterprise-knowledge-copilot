@@ -615,6 +615,36 @@
       cursor: not-allowed;
     }
 
+    .remember-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .remember-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .remember-option input {
+      width: 16px !important;
+      height: 16px !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 4px !important;
+      border: none !important;
+      box-shadow: none !important;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
     /* Responsive adjustments for login page */
     @media (max-width: 1080px) {
       #login-screen > div {
@@ -722,6 +752,17 @@
               onkeydown="if(event.key==='Enter') doLogin()">
           </label>
           
+          <div class="remember-row">
+            <label class="remember-option">
+              <input id="login-remember-user" type="checkbox">
+              <span>记住账号</span>
+            </label>
+            <label class="remember-option">
+              <input id="login-remember-session" type="checkbox">
+              <span>30天免输密码</span>
+            </label>
+          </div>
+
           <button id="login-btn" type="button" onclick="doLogin()"
             style="width: 100%; margin-top: 20px; border: none; border-radius: 12px; padding: 15px 16px; font: inherit; font-weight: 700; color: white; background: var(--primary); cursor: pointer; transition: all 0.15s ease;">
             登录平台后台
@@ -758,6 +799,12 @@
           data-section-btn="tenants" onclick="switchAdminSection('tenants')">
           <span class="material-symbols-outlined mr-3 text-[20px]">corporate_fare</span>
           企业账户管理
+        </button>
+        <button type="button"
+          class="menu-btn w-full rounded-xl px-4 py-3 text-left text-sm font-bold flex items-center transition"
+          data-section-btn="analytics" onclick="switchAdminSection('analytics')">
+          <span class="material-symbols-outlined mr-3 text-[20px]">dashboard</span>
+          平台统计报表
         </button>
         <button type="button"
           class="menu-btn w-full rounded-xl px-4 py-3 text-left text-sm font-bold flex items-center transition"
@@ -902,6 +949,11 @@
               <!-- Data rows -->
             </div>
           </section>
+        </section>
+
+        <!-- Analytics Pane -->
+        <section class="admin-pane hidden" data-section="analytics" style="padding:0;overflow:hidden;">
+          <iframe id="platform-analytics-frame" src="/platform_analytics_v2.html" style="width:100%;height:calc(100vh - 120px);border:none;"></iframe>
         </section>
 
         <!-- Logs Pane -->
@@ -1051,8 +1103,8 @@
                       <span class="block text-sm font-semibold mb-2">评测题集 JSON</span>
                       <textarea id="evaluation-cases"
                         class="w-full text-sm px-4 py-2.5 rounded-lg border border-line bg-panelSoft focus:border-primary focus:ring-primary/20 min-h-[140px]">[
-  {"question":"报销流程怎么走","expected_keywords":["报销","审批"],"expected_tier":"permanent","reference_answer":"先提交报销单并走审批流程。"},
-  {"question":"今天有没有临时通知","expected_keywords":["公告","通知"],"expected_tier":"hotfix","reference_answer":"如知识库没有临时通知，应明确说明未命中相关内容。"}
+  {"question":"报销流程怎么走","expected_keywords":["报销","审批"],"expected_tier":"医保","reference_answer":"先提交报销单并走审批流程。"},
+  {"question":"今天有没有临时通知","expected_keywords":["公告","通知"],"expected_tier":"挂号","reference_answer":"如知识库没有临时通知，应明确说明未命中相关内容。"}
 ]</textarea>
                     </label>
                     <div class="flex gap-3">
@@ -1169,8 +1221,19 @@
 
     const ADMIN_TOKEN_KEY = "lok_admin_basic_token";
     const ADMIN_USER_KEY = "lok_admin_user";
+    const ADMIN_REMEMBER_USER_KEY = "lok_admin_remember_user";
+    const ADMIN_REMEMBER_SESSION_KEY = "lok_admin_remember_session";
+    const ADMIN_TOKEN_EXPIRES_KEY = "lok_admin_token_expires_at";
     let token = "";
     let editingTenantId = "";
+
+    function syncAdminTokenState() {
+      window.token = token || "";
+      const frame = document.getElementById("platform-analytics-frame");
+      if (frame && token) {
+        frame.src = `/platform_analytics_v2.html?token=${encodeURIComponent(token)}`;
+      }
+    }
 
     function headers() {
       return { "Content-Type": "application/json", "Authorization": "Basic " + token };
@@ -1180,19 +1243,57 @@
       return token ? headers() : { "Content-Type": "application/json" };
     }
 
-    function saveAdminToken(value, username) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, value || "");
-      localStorage.setItem(ADMIN_USER_KEY, username || "");
+    function clearAdminSavedSession() {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      localStorage.removeItem(ADMIN_TOKEN_EXPIRES_KEY);
+      localStorage.removeItem(ADMIN_REMEMBER_SESSION_KEY);
+    }
+
+    function saveAdminToken(value, username, rememberUser = false, rememberSession = false) {
+      if (rememberUser && username) {
+        localStorage.setItem(ADMIN_USER_KEY, username || "");
+        localStorage.setItem(ADMIN_REMEMBER_USER_KEY, "1");
+      } else {
+        localStorage.removeItem(ADMIN_USER_KEY);
+        localStorage.removeItem(ADMIN_REMEMBER_USER_KEY);
+      }
+      if (rememberSession && value) {
+        localStorage.setItem(ADMIN_TOKEN_KEY, value || "");
+        localStorage.setItem(ADMIN_TOKEN_EXPIRES_KEY, String(Date.now() + 30 * 24 * 60 * 60 * 1000));
+        localStorage.setItem(ADMIN_REMEMBER_SESSION_KEY, "1");
+      } else {
+        clearAdminSavedSession();
+      }
     }
 
     function clearAdminToken() {
-      localStorage.removeItem(ADMIN_TOKEN_KEY);
-      localStorage.removeItem(ADMIN_USER_KEY);
+      clearAdminSavedSession();
+      if (localStorage.getItem(ADMIN_REMEMBER_USER_KEY) !== "1") {
+        localStorage.removeItem(ADMIN_USER_KEY);
+      }
+      token = "";
+      syncAdminTokenState();
+    }
+
+    function getAdminSavedAuth() {
+      const rememberUser = localStorage.getItem(ADMIN_REMEMBER_USER_KEY) === "1";
+      const rememberSession = localStorage.getItem(ADMIN_REMEMBER_SESSION_KEY) === "1";
+      const expiresAt = Number(localStorage.getItem(ADMIN_TOKEN_EXPIRES_KEY) || 0);
+      if (rememberSession && (!expiresAt || expiresAt <= Date.now())) {
+        clearAdminSavedSession();
+      }
+      return {
+        username: rememberUser ? (localStorage.getItem(ADMIN_USER_KEY) || "") : "",
+        token: localStorage.getItem(ADMIN_TOKEN_KEY) || "",
+        rememberUser,
+        rememberSession: localStorage.getItem(ADMIN_REMEMBER_SESSION_KEY) === "1",
+      };
     }
 
     function showDashboard() {
       document.getElementById("login-screen").classList.add("hidden");
       document.getElementById("dashboard").classList.remove("hidden");
+      syncAdminTokenState();
     }
 
     function showLogin() {
@@ -1202,12 +1303,14 @@
 
     const adminSectionPathMap = {
       tenants: "/admin",
+      analytics: "/platform/analytics",
       logs: "/platform/logs"
     };
     const adminPathSectionMap = {
       "/admin": "tenants",
       "/admin-v2": "tenants",
       "/platform/tenants": "tenants",
+      "/platform/analytics": "analytics",
       "/platform/logs": "logs",
       "/platform-logs-v2": "logs",
       "/platform-tenants-v2": "tenants"
@@ -1230,6 +1333,7 @@
       });
       const titleMap = {
         tenants: ["企业账户管理", "创建、停用、维护企业租户账号，并发放租户控制台入口。"],
+        analytics: ["平台统计报表", "平台运营数据总览、租户分析与资源监控。"],
         logs: ["平台总日志", "查看平台请求、护栏事件、缓存和知识命中等全局运行数据。"]
       };
       const [title, subtitle] = titleMap[section] || titleMap.tenants;
@@ -1261,6 +1365,7 @@
     }
 
     async function bootstrapAdmin() {
+      syncAdminTokenState();
       showDashboard();
       await Promise.all([loadTenants(), loadObservabilityPanel(), loadChatLogs(1)]);
     }
@@ -1268,6 +1373,8 @@
     async function doLogin() {
       const username = document.getElementById("login-user").value.trim();
       const password = document.getElementById("login-pass").value.trim();
+      const rememberUser = !!document.getElementById("login-remember-user")?.checked;
+      const rememberSession = !!document.getElementById("login-remember-session")?.checked;
       const msg = document.getElementById("login-msg");
       const btn = document.getElementById("login-btn");
 
@@ -1295,7 +1402,8 @@
           throw new Error(data.msg || "登录失败");
         }
         token = data.token;
-        saveAdminToken(token, username);
+        syncAdminTokenState();
+        saveAdminToken(token, username, rememberUser, rememberSession);
         await bootstrapAdmin();
       } catch (error) {
         msg.textContent = error.message || "登录失败";
@@ -1308,6 +1416,7 @@
     function doAdminLogout() {
       clearAdminToken();
       token = "";
+      syncAdminTokenState();
       location.reload();
     }
 
@@ -1562,7 +1671,7 @@
       const nextJobs = (status.next_jobs || []).map((job) => `
         <div class="log-item">
           <div class="font-semibold">${escapeHtml(job.source_name || job.source_id || "-")}</div>
-          <div class="text-sm text-textMuted mt-2">租户：${escapeHtml(job.tenant_name || job.tenant_id || "-")} · 层级：${escapeHtml(job.tier || "-")} · 自动：${job.auto_ingest ? "是" : "否"}</div>
+          <div class="text-sm text-textMuted mt-2">租户：${escapeHtml(job.tenant_name || job.tenant_id || "-")} · 知识库：${escapeHtml(job.library_id || job.tier || "-")} · 自动：${job.auto_ingest ? "是" : "否"}</div>
         </div>
       `).join("");
       root.innerHTML = `
@@ -1663,12 +1772,28 @@
     }
 
     async function bootstrap() {
-      const savedToken = localStorage.getItem(ADMIN_TOKEN_KEY);
+      const saved = getAdminSavedAuth();
+      const loginUserEl = document.getElementById("login-user");
+      const rememberUserEl = document.getElementById("login-remember-user");
+      const rememberSessionEl = document.getElementById("login-remember-session");
+      if (loginUserEl && saved.username) loginUserEl.value = saved.username;
+      if (rememberUserEl) rememberUserEl.checked = !!saved.rememberUser;
+      if (rememberSessionEl) rememberSessionEl.checked = !!saved.rememberSession;
+      if (rememberSessionEl && rememberUserEl) {
+        rememberSessionEl.addEventListener("change", () => {
+          if (rememberSessionEl.checked) rememberUserEl.checked = true;
+        });
+        rememberUserEl.addEventListener("change", () => {
+          if (!rememberUserEl.checked) rememberSessionEl.checked = false;
+        });
+      }
+      const savedToken = saved.token;
       if (!savedToken) {
         showLogin();
         return;
       }
       token = savedToken;
+      syncAdminTokenState();
       try {
         await bootstrapAdmin();
         initAdminSectionFromLocation();

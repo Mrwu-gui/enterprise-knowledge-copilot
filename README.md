@@ -1,104 +1,28 @@
-# Enterprise Knowledge Copilot
+# LOK 企业知识 Agent 平台
 
-Enterprise Knowledge Copilot 是一个面向企业场景的 **多租户 RAG 知识助手平台**。  
-它不只是“套了一个大模型聊天框”，而是把企业 AI 应用真正落到了完整工程链路上：
+这是一个从母版源码导出企业版和服务商版的交付项目。
 
-- 多租户隔离
-- 租户级 Prompt / 模型 / 检索配置
-- BM25 + 向量检索 + 混合检索 + Rerank
-- Query Rewrite / Query Routing / Retry / Judge
-- 会话历史与短期记忆
-- 缓存、日志、检索解释、评测、调度
-- 平台后台、租户后台、前台聊天三端联动
+当前仓库不是两套独立代码，而是一套母版源码，通过 `backend/release_profiles.py` 按版本裁剪成：
 
-## 项目亮点
+- `enterprise`：企业版，单后台
+- `service_provider`：服务商版，平台后台 + 租户后台
 
-大部分 RAG Demo 只做到：
+## 当前要看什么
 
-`上传文档 -> 提问 -> 返回答案`
+- 文档入口：`docs/README.md`
+- 版本拆分规则：`backend/release_profiles.py`
+- 导出脚本：`scripts/export_all_releases.py`
+- 最新导出目录：
+  - `output/releases/lok_enterprise/`
+  - `output/releases/lok_service_provider/`
 
-这个项目往前走了一大步，重点做了企业级 AI 产品真正需要的部分：
+## 一键导出
 
-- **检索编排**：不是固定一条检索链，而是会根据问题画像动态选择检索路径
-- **可解释性**：每次回答都能回传 `knowledge_hits`、`retrieval_trace`、Rerank 状态、命中层级、耗时信息
-- **多租户运行时**：每个租户拥有独立的知识空间、Prompt、检索配置、模型配置、主题配置和账号体系
-- **可运营**：有审计日志、检索解释、评测实验、采集调度、安全护栏、缓存命中等完整后台能力
-- **可降级与兜底**：支持缓存命中、工具优先、检索重试、模型 fallback、Key 池轮换
-
-## 核心能力
-
-### 1. 多租户企业 AI 运行时
-
-- 租户知识库隔离
-- 租户管理员与成员账号体系
-- 租户级 `app_config / system_prompt / model_config / retrieval_config / tool_config`
-- 独立品牌配置、主题色、欢迎语、推荐问题
-
-### 2. 检索能力栈
-
-- **BM25 稀疏检索**
-- **Qdrant 向量检索**
-- **Hybrid 混合检索**
-- **Rerank 重排**
-- **Query Rewrite**
-- **分级重试策略**
-- **问题意图 / 回答策略路由**
-- **实体词 / 别名扩召回**
-
-### 3. 可解释 RAG
-
-每一次回答都可以落库并展示：
-
-- 命中文件
-- 命中层级
-- 召回分 / 重排分 / 综合分
-- 检索后端
-- 检索路径
-- 检索尝试次数
-- 实际使用模型
-- 各阶段耗时
-- 缓存命中状态
-
-### 4. 聊天应用层
-
-- SSE 流式输出
-- 会话列表与会话内历史消息
-- 基于 `session_id` 的短期记忆
-- 同租户同问题精确缓存
-- 排队状态与生成状态可视化
-
-### 5. 运维与治理
-
-- 输入 / 输出安全护栏
-- 请求日志
-- 对话审计日志
-- 检索解释日志
-- 评测实验
-- 采集调度器
-- 模型配置与 Key 池治理
-
-## 系统架构
-
-```mermaid
-flowchart LR
-    U["前台聊天 / 租户后台 / 平台后台"] --> API["FastAPI 应用层"]
-    API --> AUTH["账号认证 / 租户认证"]
-    API --> WF["LangGraph 聊天工作流"]
-    WF --> CACHE["精确缓存"]
-    WF --> TOOL["工具路由"]
-    WF --> REWRITE["Query Rewrite + 实体别名扩展"]
-    WF --> ROUTE["检索路由"]
-    ROUTE --> BM25["BM25 Retriever"]
-    ROUTE --> QDRANT["Qdrant Retriever"]
-    ROUTE --> HYBRID["Hybrid Fusion"]
-    HYBRID --> RERANK["Rerank 重排"]
-    RERANK --> PROMPT["Prompt 构建 + 会话记忆"]
-    PROMPT --> LLM["LLM Service + Fallback + Key Pool"]
-    LLM --> TRACE["检索解释 / 日志 / 可观测"]
-    TRACE --> UI["前端解释面板"]
+```bash
+python3 scripts/export_all_releases.py
 ```
 
-## 检索链路
+导出完成后会得到：
 
 ```text
 question
@@ -219,57 +143,23 @@ knowledge/
 - no-cache 模板下发，避免前端吃旧页面
 - 企业登录页与品牌化主题能力
 - 类 Chat 产品的会话列表与多轮记忆
+- `output/releases/lok_enterprise/`
+- `output/releases/lok_service_provider/`
+- `output/releases/lok_enterprise_latest.zip`
+- `output/releases/lok_service_provider_latest.zip`
 
 ## 本地启动
 
-### 1. 安装依赖
-
 ```bash
 pip install -r requirements.txt
+python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 6090 --reload
 ```
 
-### 2. 配置密钥
+## 当前文档集合
 
-任选一种方式：
-
-- `.env`
-- `config/api_keys.txt`
-
-示例文件：
-
-- `.env.example`
-- `config/api_keys.txt.example`
-
-### 3. 启动服务
-
-```bash
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 6090
-```
-
-访问入口：
-
-- 平台后台：`http://127.0.0.1:6090/admin`
-- 租户后台：`http://127.0.0.1:6090/tenant`
-- 前台聊天：`http://127.0.0.1:6090/chat`
-
-## 安全说明
-
-- 真实密钥不会提交到仓库
-- 本地数据库与向量库不会提交到仓库
-- 租户私有知识数据不会提交到仓库
-- 仓库保留的是可公开的代码与示例配置
-
-## 这个仓库体现了什么
-
-这个项目更适合被理解为一个 **企业 AI 应用工程项目**，而不只是一个大模型 Demo。
-
-它体现了：
-
-- 如何构建多租户 RAG 产品
-- 如何把检索从“固定搜索”升级为“动态编排”
-- 如何让 RAG 具备可解释、可排障、可运营能力
-- 如何把后台运维、租户配置和前台聊天体验整合到一套系统里
-
----
-
-如果你正在做企业知识助手、私有 AI Copilot、或者多租户 RAG 平台，这个仓库可以作为一个相对完整的工程参考。
+- `docs/00_版本与交付说明.md`
+- `docs/01_功能介绍.md`
+- `docs/02_部署与启动.md`
+- `docs/03_使用教程.md`
+- `docs/04_二开与接口说明.md`
+- `docs/05_运维排障.md`

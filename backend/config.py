@@ -85,9 +85,9 @@ INGEST_USER_AGENT = os.getenv(
 # 默认知识层级配置。
 # 运行时实际展示与目录会由 app_config 覆盖，这里只保留兜底值。
 KNOWLEDGE_TIERS = {
-    "hotfix":    {"label": "L3 热库", "weight": 3.0, "desc": "高时效、随时变化的知识"},
-    "seasonal":  {"label": "L2 增量库", "weight": 2.0, "desc": "阶段性更新、偶尔变更的知识"},
-    "permanent": {"label": "L1 基础库", "weight": 1.0, "desc": "长期稳定、基本不变的知识"},
+    "hotfix":    {"label": "知识文件", "weight": 1.0, "desc": "兼容旧数据的知识目录别名"},
+    "seasonal":  {"label": "知识文件", "weight": 1.0, "desc": "兼容旧数据的知识目录别名"},
+    "permanent": {"label": "知识文件", "weight": 1.0, "desc": "兼容旧数据的知识目录别名"},
 }
 
 # RAG settings
@@ -99,13 +99,20 @@ RAG_CHUNK_OVERLAP = 50
 CACHE_TTL_SECONDS = 600  # 10 minutes
 CACHE_SIMILARITY_THRESHOLD = 0.85
 
-# Rate limiting - 1 request per 10 seconds per user key
+# Rate limiting - frontend anti-abuse guard, not a full concurrency control strategy
 RATE_LIMIT_MAX_REQUESTS = 1
 RATE_LIMIT_WINDOW_SECONDS = 10
 
+# In-process concurrency guards for chat traffic
+GLOBAL_CHAT_CONCURRENCY_LIMIT = int(os.getenv("GLOBAL_CHAT_CONCURRENCY_LIMIT", "40"))
+TENANT_CHAT_CONCURRENCY_LIMIT = int(os.getenv("TENANT_CHAT_CONCURRENCY_LIMIT", "12"))
+AGENT_CHAT_CONCURRENCY_LIMIT = int(os.getenv("AGENT_CHAT_CONCURRENCY_LIMIT", "6"))
+GLOBAL_LLM_CONCURRENCY_LIMIT = int(os.getenv("GLOBAL_LLM_CONCURRENCY_LIMIT", "24"))
+GLOBAL_WORKFLOW_IO_CONCURRENCY_LIMIT = int(os.getenv("GLOBAL_WORKFLOW_IO_CONCURRENCY_LIMIT", "20"))
+
 # Admin credentials
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "rag2026")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "platform_admin").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Platform@2026").strip()
 
 # Server
 HOST = "0.0.0.0"

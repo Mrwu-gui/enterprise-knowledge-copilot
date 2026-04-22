@@ -6,6 +6,7 @@ import contextlib
 import json
 import math
 import os
+import shlex
 import re
 import shutil
 import smtplib
@@ -19,13 +20,24 @@ from typing import Any, Callable, TypedDict
 
 import aiohttp
 
+from backend.concurrency import BusyError, acquire_llm_slot, acquire_workflow_io_slot
 from backend.llm_service import build_provider_route
 from backend.model_config import load_model_config
+from backend.knowledge_assets import annotate_retrieval_results_with_scope
 from backend.rag import build_runtime_rag_engine
 from backend.retrieval_config import load_retrieval_config
 from backend.tenant_config import get_tenant_knowledge_dir, load_tenant_app_config, load_tenant_system_prompt
 from backend.tool_config import load_tool_config
 from backend.workflow_config import load_workflow_config
+
+try:
+    from backend.hospital_mock import is_mock_hospital_mcp_url, mock_hospital_mcp_result
+except Exception:  # pragma: no cover
+    def is_mock_hospital_mcp_url(url: str) -> bool:
+        return False
+
+    def mock_hospital_mcp_result(tool_name: str, payload: object) -> dict:
+        raise WorkflowRuntimeError("本地调试桥接未启用")
 
 try:
     from langgraph.graph import END, START, StateGraph
@@ -83,6 +95,50 @@ def _safe_json_loads(value: object, fallback):
     except Exception:
         return deepcopy(fallback)
     return parsed
+
+
+def _extract_json_text(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    direct = _safe_json_loads(text, None)
+    if isinstance(direct, (dict, list)):
+        return text
+    block_match = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", text, re.S | re.I)
+    if block_match:
+        candidate = str(block_match.group(1) or "").strip()
+        parsed = _safe_json_loads(candidate, None)
+        if isinstance(parsed, (dict, list)):
+            return candidate
+    brace_match = re.search(r"(\{.*\}|\[.*\])", text, re.S)
+    if brace_match:
+        candidate = str(brace_match.group(1) or "").strip()
+        parsed = _safe_json_loads(candidate, None)
+        if isinstance(parsed, (dict, list)):
+            return candidate
+    return ""
+
+
+def _normalize_ai_structured_output(value: object) -> dict:
+    candidate = _extract_json_text(value)
+    parsed = _safe_json_loads(candidate, None) if candidate else None
+    if not isinstance(parsed, dict):
+        return {}
+    render_payload = parsed.get("render_payload") if isinstance(parsed.get("render_payload"), dict) else {}
+    if not render_payload and any(key in parsed for key in ("type", "title", "cards", "tables", "charts", "sections", "sections_extra")):
+        render_payload = deepcopy(parsed)
+    answer_text = ""
+    for key in ("answer_text", "answer", "text", "markdown", "content", "summary"):
+        current = parsed.get(key)
+        if isinstance(current, str) and current.strip():
+            answer_text = current.strip()
+            break
+    return {
+        "json_text": candidate,
+        "parsed": parsed,
+        "answer_text": answer_text,
+        "render_payload": render_payload if isinstance(render_payload, dict) else {},
+    }
 
 
 def _to_number(value: object, default: float = 0.0) -> float:
@@ -173,7 +229,141 @@ def _node_label(node: dict) -> str:
     return str(data.get("label") or node.get("type") or node.get("id") or "node")
 
 
-async def _call_llm(*, prompt: str, model_settings: dict, node_data: dict) -> dict:
+def _guess_agent_name(node_data: dict) -> str:
+    for raw in [
+        node_data.get("assistantName"),
+        node_data.get("role"),
+        node_data.get("label"),
+        node_data.get("description"),
+        node_data.get("prompt"),
+    ]:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        match = re.search(r"“([^”]{2,30})”", text)
+        if match:
+            return match.group(1)
+        for suffix in ("答复", "流程", "检索", "规则核验", "生成", "节点"):
+            text = text.replace(suffix, "")
+        text = text.strip(" ：:-")
+        if "助手" in text:
+            return text
+    return "医院助手"
+
+
+def _clean_text_lines(text: object) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in str(text or "").splitlines():
+        line = raw.strip().lstrip("-").strip()
+        if len(line) < 4:
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(line)
+    return result
+
+
+def _summarize_knowledge_context(context: dict) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for node_result in (context.get("nodes") or {}).values():
+        if not isinstance(node_result, dict):
+            continue
+        for hit in node_result.get("hits") or []:
+            if not isinstance(hit, dict):
+                continue
+            for line in _clean_text_lines(hit.get("content")):
+                if line.lower() in seen:
+                    continue
+                seen.add(line.lower())
+                lines.append(line)
+                if len(lines) >= 6:
+                    return lines
+        for line in _clean_text_lines(node_result.get("knowledge_text")):
+            if line.lower() in seen:
+                continue
+            seen.add(line.lower())
+            lines.append(line)
+            if len(lines) >= 6:
+                return lines
+    return lines
+
+
+def _summarize_mcp_context(context: dict) -> tuple[list[str], list[str]]:
+    highlights: list[str] = []
+    manual_flags: list[str] = []
+    seen: set[str] = set()
+    for node_result in (context.get("nodes") or {}).values():
+        if not isinstance(node_result, dict):
+            continue
+        payload = node_result.get("result")
+        if not isinstance(payload, dict):
+            continue
+        payload_body = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+        if not isinstance(payload_body, dict):
+            continue
+        for key in ("summary", "triage_advice", "eligibility", "manual_review"):
+            value = str(payload_body.get(key) or "").strip()
+            if value and value.lower() not in seen:
+                seen.add(value.lower())
+                highlights.append(value)
+        for key in ("coverage_scope", "decision_points", "contraindications", "required_materials", "highlights"):
+            values = payload_body.get(key)
+            if not isinstance(values, list):
+                continue
+            for item in values:
+                value = str(item or "").strip()
+                if value and value.lower() not in seen:
+                    seen.add(value.lower())
+                    highlights.append(value)
+        manual_review = str(payload_body.get("manual_review") or "").strip()
+        if manual_review:
+            manual_flags.append(manual_review)
+    return highlights[:6], manual_flags[:3]
+
+
+def _build_ai_fallback_text(*, node_data: dict, context: dict, reason: str) -> str:
+    agent_name = _guess_agent_name(node_data)
+    question = str(_dot_get(context, "input.text", "") or "").strip()
+    knowledge_lines = _summarize_knowledge_context(context)
+    mcp_lines, manual_flags = _summarize_mcp_context(context)
+    combined = []
+    for item in knowledge_lines + mcp_lines:
+        clean = str(item or "").strip()
+        if clean and clean not in combined:
+            combined.append(clean)
+    if not combined:
+        combined.append("当前已进入医院业务流程，但本次命中的知识依据较少，建议转人工窗口或专科门诊进一步确认。")
+
+    intro = f"{agent_name}已根据当前问题进入对应业务流程。"
+    if any(word in question for word in ("急诊", "胸痛", "胸闷", "呼吸困难", "意识", "高热", "出血")):
+        intro = f"{agent_name}判断这类情况需要优先关注风险分层，若症状正在加重请先按急诊流程处理。"
+    elif any(word in question for word in ("医保", "报销", "备案", "复诊", "预约", "挂号")):
+        intro = f"{agent_name}判断这类问题以院内预约和医保规则为主，先按流程准备资料再办理。"
+    elif any(word in question for word in ("报告", "血常规", "CT", "MRI", "复查")):
+        intro = f"{agent_name}判断这是检查结果解释与复查提醒场景，先看异常项，再决定复查和就诊动作。"
+
+    lines = [intro, "", "建议这样处理："]
+    for index, item in enumerate(combined[:4], start=1):
+        lines.append(f"{index}. {item}")
+    if manual_flags:
+        lines.extend(["", "请转人工："])
+        for item in manual_flags[:2]:
+            lines.append(f"- {item}")
+    lines.extend(
+        [
+            "",
+            "说明：本次答复已走医院知识库和流程节点兜底生成；如现场执行口径有调整，以医院窗口和临床当班人员最终说明为准。",
+            f"流程状态：AI 节点已自动降级处理（{reason}）。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+async def _call_llm(*, prompt: str, model_settings: dict, node_data: dict, images: list[dict] | None = None) -> dict:
     workflow_route = []
     chosen_model = str(node_data.get("model") or "").strip()
     if chosen_model and chosen_model != "__default__":
@@ -187,6 +377,19 @@ async def _call_llm(*, prompt: str, model_settings: dict, node_data: dict) -> di
         raise WorkflowRuntimeError("当前租户没有可用模型供应商")
     temperature = _to_number(node_data.get("temperature"), 0.7)
     max_tokens = int(_to_number(node_data.get("max_tokens"), 1200))
+    normalized_images = [
+        {
+            "data_url": str(item.get("data_url") or "").strip(),
+            "mime_type": str(item.get("mime_type") or "image/jpeg").strip() or "image/jpeg",
+            "name": str(item.get("name") or "image").strip() or "image",
+        }
+        for item in (images or [])
+        if isinstance(item, dict) and str(item.get("data_url") or "").strip().startswith("data:image/")
+    ]
+    if normalized_images:
+        provider_routes = [provider for provider in provider_routes if bool(provider.get("supports_image"))]
+        if not provider_routes:
+            raise WorkflowRuntimeError("当前智能体绑定的模型仅支持文本输入，请切换到支持图文的模型后再上传图片。")
     last_error = "模型请求失败"
     for provider in provider_routes:
         for model in provider.get("model_route") or []:
@@ -197,7 +400,7 @@ async def _call_llm(*, prompt: str, model_settings: dict, node_data: dict) -> di
                         "model": model,
                         "messages": [
                             {"role": "system", "content": "你是企业自动化流程中的智能处理节点，请只输出对后续节点有用的结果。"},
-                            {"role": "user", "content": prompt},
+                            {"role": "user", "content": _build_workflow_user_content(prompt, normalized_images)},
                         ],
                         "stream": False,
                         "temperature": temperature,
@@ -207,62 +410,79 @@ async def _call_llm(*, prompt: str, model_settings: dict, node_data: dict) -> di
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                     }
-                    connector = aiohttp.TCPConnector(ssl=WORKFLOW_SSL_CTX)
-                    async with aiohttp.ClientSession(connector=connector) as session:
-                        async with session.post(
-                            f"{str(provider.get('base_url') or '').rstrip('/')}/chat/completions",
-                            json=payload,
-                            headers=headers,
-                            timeout=aiohttp.ClientTimeout(total=120),
-                        ) as resp:
-                            text = await resp.text()
-                            if resp.status >= 400:
-                                last_error = f"模型接口异常: HTTP {resp.status}"
-                                continue
-                            data = json.loads(text)
-                            content = (
-                                data.get("choices", [{}])[0]
-                                .get("message", {})
-                                .get("content", "")
-                            )
-                            return {
-                                "provider_id": provider.get("provider_id", ""),
-                                "provider_label": provider.get("provider_label", ""),
-                                "model": model,
-                                "text": str(content or "").strip(),
-                                "raw": data,
-                            }
+                    async with acquire_llm_slot():
+                        connector = aiohttp.TCPConnector(ssl=WORKFLOW_SSL_CTX)
+                        async with aiohttp.ClientSession(connector=connector) as session:
+                            async with session.post(
+                                f"{str(provider.get('base_url') or '').rstrip('/')}/chat/completions",
+                                json=payload,
+                                headers=headers,
+                                timeout=aiohttp.ClientTimeout(total=120),
+                            ) as resp:
+                                text = await resp.text()
+                                if resp.status >= 400:
+                                    last_error = f"模型接口异常: HTTP {resp.status}"
+                                    continue
+                                data = json.loads(text)
+                                content = (
+                                    data.get("choices", [{}])[0]
+                                    .get("message", {})
+                                    .get("content", "")
+                                )
+                                return {
+                                    "provider_id": provider.get("provider_id", ""),
+                                    "provider_label": provider.get("provider_label", ""),
+                                    "model": model,
+                                    "text": str(content or "").strip(),
+                                    "raw": data,
+                                }
+                except BusyError:
+                    last_error = "模型通道繁忙，请稍后再试"
                 except Exception as exc:
                     last_error = str(exc)
                     continue
     raise WorkflowRuntimeError(last_error)
 
 
+def _build_workflow_user_content(prompt: str, images: list[dict]) -> str | list[dict]:
+    clean_prompt = str(prompt or "").strip()
+    if not images:
+        return clean_prompt
+    content: list[dict] = []
+    if clean_prompt:
+        content.append({"type": "text", "text": clean_prompt})
+    for item in images:
+        data_url = str(item.get("data_url") or "").strip()
+        if data_url:
+            content.append({"type": "image_url", "image_url": {"url": data_url}})
+    return content or clean_prompt
+
+
 def _filter_knowledge_hits(results: list[dict], node_data: dict) -> list[dict]:
     threshold = _to_number(node_data.get("threshold"), 0.0)
     knowledge_base = str(node_data.get("knowledgeBase") or "").strip()
-    legacy_tier_map = {
-        "默认知识库": "",
-        "L1 基础库": "permanent",
-        "L2 增量库": "seasonal",
-        "L3 热库": "hotfix",
-    }
-    legacy_tier = legacy_tier_map.get(knowledge_base, None)
+    legacy_names = {"默认知识库", "全部知识库", "L1 基础库", "L2 增量库", "L3 热库"}
     filtered = []
     for item in results:
         score = _to_number(item.get("score"), 0.0)
         if score < threshold:
             continue
-        if legacy_tier is not None:
-            if legacy_tier and str(item.get("tier") or "") != legacy_tier:
-                continue
-        elif knowledge_base and knowledge_base != "全部知识库":
+        if knowledge_base and knowledge_base not in legacy_names:
             item_library = str(item.get("library_id") or "").strip()
             item_library_name = str(item.get("library_name") or "").strip()
             if knowledge_base not in {item_library, item_library_name}:
                 continue
         filtered.append(item)
     return filtered
+
+
+def _knowledge_scope_from_node(node_data: dict) -> dict:
+    knowledge_base = str(node_data.get("knowledgeBase") or "").strip()
+    if knowledge_base in {"默认知识库", "全部知识库", "L1 基础库", "L2 增量库", "L3 热库"}:
+        return {}
+    if knowledge_base:
+        return {"libraries": [knowledge_base]}
+    return {}
 
 
 def _outgoing_map(connections: list[dict]) -> dict[str, list[dict]]:
@@ -411,9 +631,9 @@ async def _call_mcp_server(
             break
     if not target:
         raise WorkflowRuntimeError(f"MCP 服务不存在或未启用：{server_id}")
-    bridge_url = str(target.get("bridge_url") or "").strip()
-    if not bridge_url:
-        raise WorkflowRuntimeError(f"MCP 服务未配置调用地址：{server_id}")
+    transport = str(target.get("transport") or ("http" if (target.get("bridge_url") or target.get("url")) else "stdio")).strip().lower() or "http"
+    bridge_url = str(target.get("bridge_url") or target.get("url") or "").strip()
+    command = str(target.get("command") or "").strip()
     headers = {}
     if isinstance(target.get("headers"), dict):
         headers.update({str(k): str(v) for k, v in target.get("headers", {}).items()})
@@ -432,28 +652,135 @@ async def _call_mcp_server(
             "last": deepcopy(context.get("last") or {}),
         },
     }
-    connector = aiohttp.TCPConnector(ssl=WORKFLOW_SSL_CTX)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        async with session.post(
-            bridge_url,
-            json=request_body,
-            headers=headers,
-            timeout=aiohttp.ClientTimeout(total=timeout_seconds),
-        ) as resp:
-            text = await resp.text()
-            parsed = _safe_json_loads(text, {})
-            ok = resp.status < 400 and not (isinstance(parsed, dict) and parsed.get("ok") is False)
+    if transport == "http" and not bridge_url:
+        raise WorkflowRuntimeError(f"MCP 服务未配置调用地址：{server_id}")
+    if transport == "stdio" and not command:
+        raise WorkflowRuntimeError(f"MCP 服务未配置启动命令：{server_id}")
+    if transport == "http" and is_mock_hospital_mcp_url(bridge_url):
+        mock_result = mock_hospital_mcp_result(tool_name, request_body["input"])
+        return {
+            "ok": True,
+            "status": 200,
+            "server_id": server_id,
+            "server_label": str(target.get("label") or server_id),
+            "tool": tool_name,
+            "request": request_body,
+            "body": {
+                "ok": True,
+                "message": "local mcp bridge",
+                "result": mock_result,
+            },
+            "result": mock_result,
+            "message": "local mcp bridge",
+        }
+    if transport == "stdio":
+        args = [str(v) for v in (target.get("args") or []) if str(v).strip()]
+        if not args and " " in command:
+            command_parts = shlex.split(command)
+            command = command_parts[0]
+            args = command_parts[1:]
+        env = os.environ.copy()
+        if isinstance(target.get("env"), dict):
+            env.update({str(k): str(v) for k, v in target.get("env", {}).items()})
+        for key in (target.get("env_passthrough") or []):
+            clean_key = str(key or "").strip()
+            if clean_key and clean_key in os.environ:
+                env[clean_key] = os.environ[clean_key]
+        try:
+            async with acquire_workflow_io_slot():
+                proc = await asyncio.create_subprocess_exec(
+                    command,
+                    *args,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(json.dumps(request_body, ensure_ascii=False).encode("utf-8")),
+                        timeout=timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+                    raise
+                text = (stdout or b"").decode("utf-8", errors="replace").strip()
+                parsed = _safe_json_loads(text, {})
+                stderr_text = (stderr or b"").decode("utf-8", errors="replace").strip()
+                ok = proc.returncode == 0 and not (isinstance(parsed, dict) and parsed.get("ok") is False)
+                return {
+                    "ok": ok,
+                    "status": proc.returncode or 0,
+                    "server_id": server_id,
+                    "server_label": str(target.get("label") or server_id),
+                    "tool": tool_name,
+                    "request": request_body,
+                    "body": parsed if parsed else text,
+                    "result": parsed.get("result") if isinstance(parsed, dict) and "result" in parsed else (parsed if parsed else text),
+                    "message": str(parsed.get("message") or stderr_text or "") if isinstance(parsed, dict) else stderr_text,
+                    "stderr": stderr_text,
+                }
+        except BusyError:
             return {
-                "ok": ok,
-                "status": resp.status,
+                "ok": False,
+                "status": 503,
                 "server_id": server_id,
                 "server_label": str(target.get("label") or server_id),
                 "tool": tool_name,
                 "request": request_body,
-                "body": parsed if parsed else text,
-                "result": parsed.get("result") if isinstance(parsed, dict) and "result" in parsed else (parsed if parsed else text),
-                "message": str(parsed.get("message") or "") if isinstance(parsed, dict) else "",
+                "body": {"ok": False, "message": "工作流外部接口繁忙"},
+                "result": None,
+                "message": "工作流外部接口繁忙",
             }
+        except asyncio.TimeoutError:
+            return {
+                "ok": False,
+                "status": 504,
+                "server_id": server_id,
+                "server_label": str(target.get("label") or server_id),
+                "tool": tool_name,
+                "request": request_body,
+                "body": {"ok": False, "message": "MCP STDIO 调用超时"},
+                "result": None,
+                "message": "MCP STDIO 调用超时",
+            }
+    try:
+        async with acquire_workflow_io_slot():
+            connector = aiohttp.TCPConnector(ssl=WORKFLOW_SSL_CTX)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.post(
+                    bridge_url,
+                    json=request_body,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+                ) as resp:
+                    text = await resp.text()
+                    parsed = _safe_json_loads(text, {})
+                    ok = resp.status < 400 and not (isinstance(parsed, dict) and parsed.get("ok") is False)
+                    return {
+                        "ok": ok,
+                        "status": resp.status,
+                        "server_id": server_id,
+                        "server_label": str(target.get("label") or server_id),
+                        "tool": tool_name,
+                        "request": request_body,
+                        "body": parsed if parsed else text,
+                        "result": parsed.get("result") if isinstance(parsed, dict) and "result" in parsed else (parsed if parsed else text),
+                        "message": str(parsed.get("message") or "") if isinstance(parsed, dict) else "",
+                    }
+    except BusyError:
+        return {
+            "ok": False,
+            "status": 503,
+            "server_id": server_id,
+            "server_label": str(target.get("label") or server_id),
+            "tool": tool_name,
+            "request": request_body,
+            "body": {"ok": False, "message": "工作流外部接口繁忙"},
+            "result": None,
+            "message": "工作流外部接口繁忙",
+        }
 
 
 async def _run_script(node_data: dict, runtime_context: dict) -> dict:
@@ -499,14 +826,12 @@ async def _run_script(node_data: dict, runtime_context: dict) -> dict:
         )
     else:
         payload_literal = repr(input_payload)
-        wrapper = textwrap.dedent(
-            f"""
-            import json
-            ctx = {payload_literal}
-            result = None
-            {code}
-            print(json.dumps({{"result": result}}, ensure_ascii=False))
-            """
+        wrapper = (
+            "import json\n"
+            f"ctx = {payload_literal}\n"
+            "result = None\n"
+            f"{code}\n"
+            "print(json.dumps({\"result\": result}, ensure_ascii=False))\n"
         ).strip()
         proc = await asyncio.create_subprocess_exec(
             shutil.which("python3") or "python3",
@@ -570,19 +895,49 @@ async def _execute_node_logic(
         }
     elif node_type == "ai":
         rendered_prompt = str(_render_template(node_data.get("prompt") or "{{input.text}}", context))
-        llm_result = await _call_llm(prompt=rendered_prompt, model_settings=model_settings, node_data=node_data)
+        used_fallback = False
+        fallback_reason = ""
+        input_images = state["input"].get("images") if isinstance(state.get("input"), dict) else []
+        try:
+            llm_result = await _call_llm(
+                prompt=rendered_prompt,
+                model_settings=model_settings,
+                node_data=node_data,
+                images=input_images if isinstance(input_images, list) else [],
+            )
+        except WorkflowRuntimeError as exc:
+            used_fallback = True
+            fallback_reason = str(exc)
+            llm_result = {
+                "model": "__workflow_fallback__",
+                "provider_label": "local_fallback",
+                "text": _build_ai_fallback_text(node_data=node_data, context=context, reason=fallback_reason),
+                "raw": {"fallback": True, "reason": fallback_reason},
+            }
+        structured = _normalize_ai_structured_output(llm_result.get("text", ""))
+        answer_text = structured.get("answer_text") if isinstance(structured.get("answer_text"), str) else ""
         result = {
             "ok": True,
             "prompt": rendered_prompt,
             "model": llm_result.get("model", ""),
             "provider": llm_result.get("provider_label", ""),
-            "text": llm_result.get("text", ""),
+            "text": answer_text or llm_result.get("text", ""),
+            "raw_text": llm_result.get("text", ""),
             "raw": llm_result.get("raw", {}),
+            "structured_output": structured.get("parsed") if isinstance(structured.get("parsed"), dict) else {},
+            "render_payload": structured.get("render_payload") if isinstance(structured.get("render_payload"), dict) else {},
+            "fallback_used": used_fallback,
+            "fallback_reason": fallback_reason,
         }
     elif node_type == "knowledge":
         query = str(_render_template(node_data.get("query") or "{{input.text}}", context)).strip()
         top_k = max(1, int(_to_number(node_data.get("topK"), 5)))
-        search_results = rag_runtime.search(query=query, top_k=max(top_k, 5))
+        knowledge_scope = _knowledge_scope_from_node(node_data)
+        search_results = annotate_retrieval_results_with_scope(
+            tenant_id=tenant_id,
+            results=rag_runtime.search(query=query, top_k=max(top_k, 5), knowledge_scope=knowledge_scope),
+            knowledge_scope=knowledge_scope,
+        )
         filtered = _filter_knowledge_hits(search_results, node_data)[:top_k]
         result = {
             "ok": True,
@@ -607,26 +962,37 @@ async def _execute_node_logic(
         headers = _safe_json_loads(_render_template(node_data.get("headers") or "", context), {})
         body = _render_template(node_data.get("body") or "", context)
         json_body = _safe_json_loads(body, None)
-        connector = aiohttp.TCPConnector(ssl=WORKFLOW_SSL_CTX)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.request(
-                method,
-                url,
-                headers=headers if isinstance(headers, dict) else {},
-                json=json_body if isinstance(json_body, (dict, list)) else None,
-                data=None if isinstance(json_body, (dict, list)) else (str(body) if body else None),
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                text = await resp.text()
-                parsed = _safe_json_loads(text, {})
-                result = {
-                    "ok": resp.status < 400,
-                    "status": resp.status,
-                    "url": url,
-                    "method": method,
-                    "headers": dict(resp.headers),
-                    "body": parsed if parsed else text,
-                }
+        try:
+            async with acquire_workflow_io_slot():
+                connector = aiohttp.TCPConnector(ssl=WORKFLOW_SSL_CTX)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    async with session.request(
+                        method,
+                        url,
+                        headers=headers if isinstance(headers, dict) else {},
+                        json=json_body if isinstance(json_body, (dict, list)) else None,
+                        data=None if isinstance(json_body, (dict, list)) else (str(body) if body else None),
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as resp:
+                        text = await resp.text()
+                        parsed = _safe_json_loads(text, {})
+                        result = {
+                            "ok": resp.status < 400,
+                            "status": resp.status,
+                            "url": url,
+                            "method": method,
+                            "headers": dict(resp.headers),
+                            "body": parsed if parsed else text,
+                        }
+        except BusyError:
+            result = {
+                "ok": False,
+                "status": 503,
+                "url": url,
+                "method": method,
+                "headers": {},
+                "body": {"ok": False, "message": "工作流HTTP通道繁忙"},
+            }
     elif node_type == "script":
         result = await _run_script(node_data, context)
     elif node_type == "notify":

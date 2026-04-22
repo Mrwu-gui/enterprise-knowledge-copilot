@@ -11,6 +11,10 @@ import string
 from backend.config import DB_PATH
 
 
+DEFAULT_TENANT_ADMIN_USERNAME = os.getenv("DEFAULT_TENANT_ADMIN_USERNAME", "tenant_admin").strip()
+DEFAULT_TENANT_ADMIN_PASSWORD = os.getenv("DEFAULT_TENANT_ADMIN_PASSWORD", "Tenant@2026").strip()
+
+
 def get_conn():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -147,6 +151,10 @@ def init_db():
             model_override TEXT DEFAULT '{}',
             tool_scope TEXT DEFAULT '[]',
             mcp_servers TEXT DEFAULT '[]',
+            streaming INTEGER DEFAULT 1,
+            fallback_enabled INTEGER DEFAULT 1,
+            fallback_message TEXT DEFAULT '',
+            show_recommended INTEGER DEFAULT 1,
             is_default INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -169,6 +177,10 @@ def init_db():
     for col, definition in [
         ("tool_scope", "TEXT DEFAULT '[]'"),
         ("mcp_servers", "TEXT DEFAULT '[]'"),
+        ("streaming", "INTEGER DEFAULT 1"),
+        ("fallback_enabled", "INTEGER DEFAULT 1"),
+        ("fallback_message", "TEXT DEFAULT ''"),
+        ("show_recommended", "INTEGER DEFAULT 1"),
     ]:
         try:
             conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {definition}")
@@ -317,7 +329,7 @@ def init_db():
 
 
 def _ensure_default_tenant(conn: sqlite3.Connection) -> None:
-    """确保平台默认租户存在，避免空库无法启动租户能力。"""
+    """确保默认租户存在，方便交付包首次登录。"""
     row = conn.execute(
         "SELECT tenant_id FROM tenants WHERE tenant_id = 'default'"
     ).fetchone()
@@ -328,7 +340,12 @@ def _ensure_default_tenant(conn: sqlite3.Connection) -> None:
         INSERT INTO tenants (tenant_id, tenant_name, admin_username, admin_password_hash, enabled)
         VALUES (?, ?, ?, ?, 1)
         """,
-        ("default", "默认租户", "tenant_default", _hash_password("tenant2026")),
+        (
+            "default",
+            "默认租户",
+            DEFAULT_TENANT_ADMIN_USERNAME,
+            _hash_password(DEFAULT_TENANT_ADMIN_PASSWORD),
+        ),
     )
 
 
@@ -446,6 +463,9 @@ def _row_to_agent(row: sqlite3.Row | None) -> dict | None:
         item["model"] = ""
     item["enabled"] = bool(item.get("enabled", 1))
     item["is_default"] = bool(item.get("is_default", 0))
+    item["streaming"] = bool(item.get("streaming", 1))
+    item["fallback_enabled"] = bool(item.get("fallback_enabled", 1))
+    item["show_recommended"] = bool(item.get("show_recommended", 1))
     return item
 
 
@@ -455,7 +475,7 @@ def list_agents(tenant_id: str, include_disabled: bool = True) -> list[dict]:
         SELECT tenant_id, agent_id, name, description, status, enabled, avatar,
                welcome_message, input_placeholder, recommended_questions,
                prompt_override, workflow_id, knowledge_scope, model_override,
-               tool_scope, mcp_servers,
+               tool_scope, mcp_servers, streaming, fallback_enabled, fallback_message, show_recommended,
                is_default, created_at, updated_at
         FROM agents
         WHERE tenant_id = ?
@@ -476,7 +496,7 @@ def get_agent(tenant_id: str, agent_id: str) -> dict | None:
         SELECT tenant_id, agent_id, name, description, status, enabled, avatar,
                welcome_message, input_placeholder, recommended_questions,
                prompt_override, workflow_id, knowledge_scope, model_override,
-               tool_scope, mcp_servers,
+               tool_scope, mcp_servers, streaming, fallback_enabled, fallback_message, show_recommended,
                is_default, created_at, updated_at
         FROM agents
         WHERE tenant_id = ? AND agent_id = ?
@@ -505,6 +525,10 @@ def save_agent(
     model_override: dict | None = None,
     tool_scope: list[str] | None = None,
     mcp_servers: list[str] | None = None,
+    streaming: bool = True,
+    fallback_enabled: bool = True,
+    fallback_message: str = "",
+    show_recommended: bool = True,
     is_default: bool = False,
 ) -> dict:
     clean_name = str(name or "").strip()
@@ -536,6 +560,10 @@ def save_agent(
         json.dumps(model_override or {}, ensure_ascii=False),
         json.dumps(tool_scope or [], ensure_ascii=False),
         json.dumps(mcp_servers or [], ensure_ascii=False),
+        1 if streaming else 0,
+        1 if fallback_enabled else 0,
+        str(fallback_message or "").strip(),
+        1 if show_recommended else 0,
         1 if is_default else 0,
     )
     if existing:
@@ -546,6 +574,7 @@ def save_agent(
                 welcome_message = ?, input_placeholder = ?, recommended_questions = ?,
                 prompt_override = ?, workflow_id = ?, knowledge_scope = ?,
                 model_override = ?, tool_scope = ?, mcp_servers = ?,
+                streaming = ?, fallback_enabled = ?, fallback_message = ?, show_recommended = ?,
                 is_default = ?, updated_at = CURRENT_TIMESTAMP
             WHERE tenant_id = ? AND agent_id = ?
             """,
@@ -564,6 +593,10 @@ def save_agent(
                 json.dumps(model_override or {}, ensure_ascii=False),
                 json.dumps(tool_scope or [], ensure_ascii=False),
                 json.dumps(mcp_servers or [], ensure_ascii=False),
+                1 if streaming else 0,
+                1 if fallback_enabled else 0,
+                str(fallback_message or "").strip(),
+                1 if show_recommended else 0,
                 1 if is_default else 0,
                 tenant_id,
                 clean_agent_id,
@@ -576,9 +609,9 @@ def save_agent(
                 tenant_id, agent_id, name, description, status, enabled, avatar,
                 welcome_message, input_placeholder, recommended_questions,
                 prompt_override, workflow_id, knowledge_scope, model_override,
-                tool_scope, mcp_servers, is_default
+                tool_scope, mcp_servers, streaming, fallback_enabled, fallback_message, show_recommended, is_default
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             payload,
         )
@@ -1133,6 +1166,7 @@ def list_chat_logs(
     phone: str = "",
     tenant_id: str | None = None,
     agent_id: str | None = None,
+    request_id: str | None = None,
 ):
     """分页查询聊天日志，可按租户与手机号过滤。"""
     conn = get_conn()
@@ -1146,6 +1180,9 @@ def list_chat_logs(
     if agent_id is not None:
         where_parts.append("agent_id = ?")
         params.append(str(agent_id or "").strip())
+    if request_id is not None:
+        where_parts.append("request_id = ?")
+        params.append(str(request_id or "").strip())
     if phone:
         where_parts.append("phone LIKE ?")
         params.append(f"%{phone}%")
@@ -1368,13 +1405,30 @@ def get_observability_summary(tenant_id: str | None = None) -> dict:
         """ + guard_where,
         tuple(guard_params),
     ).fetchone()
+    failure_row = conn.execute(
+        """
+        SELECT
+            SUM(CASE WHEN error_message LIKE 'busy:%' THEN 1 ELSE 0 END) AS busy_rejections,
+            SUM(CASE WHEN error_message LIKE 'llm_%' OR error_message = 'llm_busy' THEN 1 ELSE 0 END) AS llm_failures,
+            SUM(CASE WHEN error_message LIKE 'workflow_failed:%' THEN 1 ELSE 0 END) AS workflow_failures,
+            SUM(CASE WHEN error_message LIKE '%workflow_io%' OR error_message LIKE '%外部接口%' THEN 1 ELSE 0 END) AS external_failures,
+            SUM(CASE WHEN path IN ('/api/chat', '/api/public/chat', '/api/tenant/chat') THEN 1 ELSE 0 END) AS chat_requests
+        FROM request_logs
+        """ + req_where,
+        tuple(req_params),
+    ).fetchone()
     conn.close()
     return {
         "requests_24h": int(req_row["total"] or 0),
+        "chat_requests_24h": int(failure_row["chat_requests"] or 0),
         "avg_duration_ms": round(float(req_row["avg_duration_ms"] or 0), 2),
         "cache_hits_24h": int(req_row["cache_hits"] or 0),
         "server_errors_24h": int(req_row["server_errors"] or 0),
         "guardrail_blocks_24h": int(guard_row["blocked"] or 0),
+        "busy_rejections_24h": int(failure_row["busy_rejections"] or 0),
+        "llm_failures_24h": int(failure_row["llm_failures"] or 0),
+        "workflow_failures_24h": int(failure_row["workflow_failures"] or 0),
+        "external_failures_24h": int(failure_row["external_failures"] or 0),
     }
 
 
@@ -1567,15 +1621,20 @@ def list_evaluation_runs(page: int = 1, per_page: int = 20, tenant_id: str | Non
 
 def list_tenants() -> list[dict]:
     """列出租户，用于平台总后台。"""
-    conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT tenant_id, tenant_name, admin_username, enabled, created_at
-        FROM tenants
-        ORDER BY id ASC
-        """
-    ).fetchall()
-    conn.close()
+    def _query():
+        conn = get_conn()
+        try:
+            return conn.execute(
+                """
+                SELECT tenant_id, tenant_name, admin_username, enabled, created_at
+                FROM tenants
+                ORDER BY id ASC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+    rows = _with_schema_retry(_query)
     return [dict(row) for row in rows]
 
 
@@ -1656,16 +1715,21 @@ def update_tenant(
 
 def verify_tenant_admin(admin_username: str, password: str) -> dict:
     """租户后台登录验证。"""
-    conn = get_conn()
-    row = conn.execute(
-        """
-        SELECT tenant_id, tenant_name, admin_username, admin_password_hash, enabled
-        FROM tenants
-        WHERE admin_username = ?
-        """,
-        ((admin_username or "").strip(),),
-    ).fetchone()
-    conn.close()
+    def _query():
+        conn = get_conn()
+        try:
+            return conn.execute(
+                """
+                SELECT tenant_id, tenant_name, admin_username, admin_password_hash, enabled
+                FROM tenants
+                WHERE admin_username = ?
+                """,
+                ((admin_username or "").strip(),),
+            ).fetchone()
+        finally:
+            conn.close()
+
+    row = _with_schema_retry(_query)
     if not row or not row["enabled"]:
         return {"ok": False, "msg": "租户管理员不存在或已停用"}
     if (row["admin_password_hash"] or "").strip() != _hash_password(password or ""):
@@ -1675,4 +1739,476 @@ def verify_tenant_admin(admin_username: str, password: str) -> dict:
         "tenant_id": row["tenant_id"],
         "tenant_name": row["tenant_name"],
         "admin_username": row["admin_username"],
+    }
+
+
+# ========== 租户统计报表函数 ==========
+
+def get_tenant_analytics_summary(tenant_id: str, days: int = 7) -> dict:
+    """获取租户统计概览数据"""
+    conn = get_conn()
+    
+    # 总问答数
+    total_chats = conn.execute(
+        f"""
+        SELECT COUNT(*) as count FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        """,
+        (tenant_id,)
+    ).fetchone()["count"]
+    
+    # 活跃用户数
+    active_users = conn.execute(
+        f"""
+        SELECT COUNT(DISTINCT phone) as count FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        """,
+        (tenant_id,)
+    ).fetchone()["count"]
+    
+    # 平均响应时间
+    avg_duration = conn.execute(
+        f"""
+        SELECT AVG(duration_ms) as avg FROM request_logs 
+        WHERE tenant_id = ? AND path IN ('/api/chat', '/api/public/chat', '/api/tenant/chat') 
+        AND created_at >= datetime('now', '-{days} days')
+        """,
+        (tenant_id,)
+    ).fetchone()["avg"] or 0
+    
+    # 知识命中率
+    knowledge_hits = conn.execute(
+        f"""
+        SELECT COUNT(*) as count FROM chat_logs 
+        WHERE tenant_id = ? AND knowledge_hits != '[]' AND created_at >= datetime('now', '-{days} days')
+        """,
+        (tenant_id,)
+    ).fetchone()["count"]
+    
+    hit_rate = round(knowledge_hits / total_chats * 100, 2) if total_chats > 0 else 0
+    
+    # 错误率
+    error_requests = conn.execute(
+        f"""
+        SELECT COUNT(*) as count FROM request_logs 
+        WHERE tenant_id = ? AND status_code >= 400 AND created_at >= datetime('now', '-{days} days')
+        """,
+        (tenant_id,)
+    ).fetchone()["count"]
+    
+    total_requests = conn.execute(
+        f"""
+        SELECT COUNT(*) as count FROM request_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        """,
+        (tenant_id,)
+    ).fetchone()["count"]
+    
+    error_rate = round(error_requests / total_requests * 100, 2) if total_requests > 0 else 0
+    
+    conn.close()
+    
+    return {
+        "total_chats": total_chats,
+        "active_users": active_users,
+        "avg_response_time": round(avg_duration, 0),
+        "knowledge_hit_rate": hit_rate,
+        "error_rate": error_rate,
+        "total_requests": total_requests,
+    }
+
+
+def get_tenant_daily_trends(tenant_id: str, days: int = 7) -> list:
+    """获取每日趋势数据"""
+    conn = get_conn()
+    
+    rows = conn.execute(
+        f"""
+        SELECT 
+            DATE(created_at) as date,
+            COUNT(*) as chat_count,
+            COUNT(DISTINCT phone) as user_count
+        FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+        """,
+        (tenant_id,)
+    ).fetchall()
+    
+    conn.close()
+    
+    return [{"date": row["date"], "chats": row["chat_count"], "users": row["user_count"]} for row in rows]
+
+
+def get_tenant_agent_usage(tenant_id: str, days: int = 7, limit: int = 10) -> list:
+    """获取智能体使用情况"""
+    conn = get_conn()
+    
+    rows = conn.execute(
+        f"""
+        SELECT 
+            agent_id,
+            COUNT(*) as chat_count,
+            COUNT(DISTINCT phone) as user_count
+        FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        GROUP BY agent_id
+        ORDER BY chat_count DESC
+        LIMIT ?
+        """,
+        (tenant_id, limit)
+    ).fetchall()
+    
+    conn.close()
+    
+    return [{"agent_id": row["agent_id"], "chats": row["chat_count"], "users": row["user_count"]} for row in rows]
+
+
+def get_tenant_top_questions(tenant_id: str, days: int = 7, limit: int = 10) -> list:
+    """获取热门问题"""
+    conn = get_conn()
+    
+    rows = conn.execute(
+        f"""
+        SELECT 
+            question,
+            COUNT(*) as count
+        FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        GROUP BY question
+        ORDER BY count DESC
+        LIMIT ?
+        """,
+        (tenant_id, limit)
+    ).fetchall()
+    
+    conn.close()
+    
+    return [{"question": row["question"], "count": row["count"]} for row in rows]
+
+
+def get_tenant_active_users(tenant_id: str, days: int = 7, limit: int = 10) -> list:
+    """获取活跃用户排行"""
+    conn = get_conn()
+    
+    rows = conn.execute(
+        f"""
+        SELECT 
+            phone,
+            COUNT(*) as chat_count
+        FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        GROUP BY phone
+        ORDER BY chat_count DESC
+        LIMIT ?
+        """,
+        (tenant_id, limit)
+    ).fetchall()
+    
+    conn.close()
+    
+    return [{"phone": row["phone"], "chats": row["chat_count"]} for row in rows]
+
+
+def get_tenant_hourly_distribution(tenant_id: str, days: int = 7) -> list:
+    """获取时段分布"""
+    conn = get_conn()
+    
+    rows = conn.execute(
+        f"""
+        SELECT 
+            CAST(STRFTIME('%H', created_at) AS INTEGER) as hour,
+            COUNT(*) as count
+        FROM chat_logs 
+        WHERE tenant_id = ? AND created_at >= datetime('now', '-{days} days')
+        GROUP BY hour
+        ORDER BY hour
+        """,
+        (tenant_id,)
+    ).fetchall()
+    
+    conn.close()
+    
+    # 填充所有24小时
+    hourly_data = {row["hour"]: row["count"] for row in rows}
+    return [{"hour": h, "count": hourly_data.get(h, 0)} for h in range(24)]
+
+
+def get_platform_analytics_overview(days: int = 7) -> dict:
+    """获取平台统计报表聚合数据。仅返回系统真实存在的数据维度。"""
+    conn = get_conn()
+    tenant_rows = conn.execute(
+        """
+        SELECT tenant_id, tenant_name, enabled, created_at
+        FROM tenants
+        ORDER BY id ASC
+        """
+    ).fetchall()
+    total_tenants = len(tenant_rows)
+    enabled_tenants = sum(1 for row in tenant_rows if int(row["enabled"] or 0) == 1)
+
+    summary_row = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_chats,
+            COUNT(DISTINCT tenant_id) AS active_tenants,
+            COUNT(DISTINCT phone) AS active_users,
+            SUM(CASE WHEN knowledge_hits != '[]' THEN 1 ELSE 0 END) AS knowledge_hits
+        FROM chat_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+        """
+    ).fetchone()
+
+    req_row = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_requests,
+            AVG(duration_ms) AS avg_duration_ms,
+            SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS error_requests,
+            SUM(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) AS cache_hits
+        FROM request_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+        """
+    ).fetchone()
+
+    guard_row = conn.execute(
+        f"""
+        SELECT COUNT(*) AS blocked
+        FROM guardrail_events
+        WHERE created_at >= datetime('now', '-{days} days')
+        """
+    ).fetchone()
+
+    eval_row = conn.execute(
+        f"""
+        SELECT COUNT(*) AS eval_runs
+        FROM evaluation_runs
+        WHERE created_at >= datetime('now', '-{days} days')
+        """
+    ).fetchone()
+
+    chat_daily_rows = conn.execute(
+        f"""
+        SELECT
+            DATE(created_at) AS stat_date,
+            COUNT(*) AS chats,
+            COUNT(DISTINCT phone) AS users,
+            COUNT(DISTINCT tenant_id) AS active_tenants
+        FROM chat_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+        GROUP BY DATE(created_at)
+        ORDER BY stat_date ASC
+        """
+    ).fetchall()
+    req_daily_rows = conn.execute(
+        f"""
+        SELECT
+            DATE(created_at) AS stat_date,
+            COUNT(*) AS requests,
+            SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS errors
+        FROM request_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+        GROUP BY DATE(created_at)
+        ORDER BY stat_date ASC
+        """
+    ).fetchall()
+    merged_daily: dict[str, dict] = {}
+    for row in chat_daily_rows:
+        merged_daily[str(row["stat_date"])] = {
+            "date": str(row["stat_date"]),
+            "chats": int(row["chats"] or 0),
+            "users": int(row["users"] or 0),
+            "active_tenants": int(row["active_tenants"] or 0),
+            "requests": 0,
+            "errors": 0,
+        }
+    for row in req_daily_rows:
+        stat_date = str(row["stat_date"])
+        item = merged_daily.setdefault(
+            stat_date,
+            {"date": stat_date, "chats": 0, "users": 0, "active_tenants": 0, "requests": 0, "errors": 0},
+        )
+        item["requests"] = int(row["requests"] or 0)
+        item["errors"] = int(row["errors"] or 0)
+    daily_trends = [merged_daily[key] for key in sorted(merged_daily.keys())]
+
+    tenant_top_rows = conn.execute(
+        f"""
+        SELECT
+            c.tenant_id,
+            COALESCE(t.tenant_name, c.tenant_id) AS tenant_name,
+            COUNT(*) AS chats,
+            COUNT(DISTINCT c.phone) AS users,
+            COUNT(DISTINCT c.agent_id) AS agents
+        FROM chat_logs c
+        LEFT JOIN tenants t ON t.tenant_id = c.tenant_id
+        WHERE c.created_at >= datetime('now', '-{days} days')
+        GROUP BY c.tenant_id
+        ORDER BY chats DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    tenant_chat_map = {
+        str(row["tenant_id"]): int(row["chats"] or 0)
+        for row in conn.execute(
+            f"""
+            SELECT tenant_id, COUNT(*) AS chats
+            FROM chat_logs
+            WHERE created_at >= datetime('now', '-{days} days')
+            GROUP BY tenant_id
+            """
+        ).fetchall()
+    }
+    tenant_activity = {"高活跃": 0, "中活跃": 0, "低活跃": 0, "未活跃": 0}
+    for tenant in tenant_rows:
+        chats = tenant_chat_map.get(str(tenant["tenant_id"]), 0)
+        if chats >= 100:
+            tenant_activity["高活跃"] += 1
+        elif chats >= 20:
+            tenant_activity["中活跃"] += 1
+        elif chats >= 1:
+            tenant_activity["低活跃"] += 1
+        else:
+            tenant_activity["未活跃"] += 1
+
+    model_usage_rows = conn.execute(
+        f"""
+        SELECT
+            CASE
+                WHEN model_name IS NULL OR TRIM(model_name) = '' THEN '未记录'
+                ELSE model_name
+            END AS model_name,
+            COUNT(*) AS calls
+        FROM request_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+          AND path IN ('/api/chat', '/api/public/chat', '/api/tenant/chat')
+        GROUP BY model_name
+        ORDER BY calls DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    agent_usage_rows = conn.execute(
+        f"""
+        SELECT
+            CASE
+                WHEN agent_id IS NULL OR TRIM(agent_id) = '' THEN '默认助手'
+                ELSE agent_id
+            END AS agent_id,
+            COUNT(*) AS chats
+        FROM chat_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+        GROUP BY agent_id
+        ORDER BY chats DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    hourly_rows = conn.execute(
+        f"""
+        SELECT
+            CAST(STRFTIME('%H', created_at) AS INTEGER) AS hour,
+            COUNT(*) AS count
+        FROM request_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+          AND path IN ('/api/chat', '/api/public/chat', '/api/tenant/chat')
+        GROUP BY hour
+        ORDER BY hour ASC
+        """
+    ).fetchall()
+    hourly_map = {int(row["hour"]): int(row["count"] or 0) for row in hourly_rows}
+    hourly_distribution = [{"hour": hour, "count": hourly_map.get(hour, 0)} for hour in range(24)]
+
+    guardrail_rule_rows = conn.execute(
+        f"""
+        SELECT
+            CASE
+                WHEN rule_name IS NULL OR TRIM(rule_name) = '' THEN '未命名规则'
+                ELSE rule_name
+            END AS rule_name,
+            COUNT(*) AS count
+        FROM guardrail_events
+        WHERE created_at >= datetime('now', '-{days} days')
+        GROUP BY rule_name
+        ORDER BY count DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    error_tenant_rows = conn.execute(
+        f"""
+        SELECT
+            r.tenant_id,
+            COALESCE(t.tenant_name, r.tenant_id) AS tenant_name,
+            COUNT(*) AS error_count
+        FROM request_logs r
+        LEFT JOIN tenants t ON t.tenant_id = r.tenant_id
+        WHERE r.created_at >= datetime('now', '-{days} days')
+          AND r.status_code >= 400
+        GROUP BY r.tenant_id
+        ORDER BY error_count DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    top_question_rows = conn.execute(
+        f"""
+        SELECT question, COUNT(*) AS count
+        FROM chat_logs
+        WHERE created_at >= datetime('now', '-{days} days')
+        GROUP BY question
+        ORDER BY count DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    conn.close()
+
+    total_chats = int(summary_row["total_chats"] or 0)
+    total_requests = int(req_row["total_requests"] or 0)
+    knowledge_hit_rate = round((int(summary_row["knowledge_hits"] or 0) / total_chats) * 100, 2) if total_chats else 0
+    error_rate = round((int(req_row["error_requests"] or 0) / total_requests) * 100, 2) if total_requests else 0
+
+    return {
+        "summary": {
+            "total_tenants": total_tenants,
+            "enabled_tenants": enabled_tenants,
+            "active_tenants": int(summary_row["active_tenants"] or 0),
+            "active_users": int(summary_row["active_users"] or 0),
+            "total_chats": total_chats,
+            "total_requests": total_requests,
+            "avg_response_time": round(float(req_row["avg_duration_ms"] or 0), 0),
+            "knowledge_hit_rate": knowledge_hit_rate,
+            "error_rate": error_rate,
+            "guardrail_blocks": int(guard_row["blocked"] or 0),
+            "cache_hits": int(req_row["cache_hits"] or 0),
+            "evaluation_runs": int(eval_row["eval_runs"] or 0),
+        },
+        "daily_trends": daily_trends,
+        "tenant_top": [
+            {
+                "tenant_id": str(row["tenant_id"] or ""),
+                "tenant_name": str(row["tenant_name"] or row["tenant_id"] or ""),
+                "chats": int(row["chats"] or 0),
+                "users": int(row["users"] or 0),
+                "agents": int(row["agents"] or 0),
+            }
+            for row in tenant_top_rows
+        ],
+        "tenant_activity": [{"label": label, "value": value} for label, value in tenant_activity.items()],
+        "model_usage": [{"model_name": str(row["model_name"] or ""), "calls": int(row["calls"] or 0)} for row in model_usage_rows],
+        "agent_usage": [{"agent_id": str(row["agent_id"] or ""), "chats": int(row["chats"] or 0)} for row in agent_usage_rows],
+        "hourly_distribution": hourly_distribution,
+        "guardrail_rules": [{"rule_name": str(row["rule_name"] or ""), "count": int(row["count"] or 0)} for row in guardrail_rule_rows],
+        "error_tenants": [
+            {
+                "tenant_id": str(row["tenant_id"] or ""),
+                "tenant_name": str(row["tenant_name"] or row["tenant_id"] or ""),
+                "error_count": int(row["error_count"] or 0),
+            }
+            for row in error_tenant_rows
+        ],
+        "top_questions": [{"question": str(row["question"] or ""), "count": int(row["count"] or 0)} for row in top_question_rows],
     }

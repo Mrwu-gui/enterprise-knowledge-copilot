@@ -1,0 +1,81 @@
+{
+  "edition": "service_provider",
+  "deployment_mode": "double_backend",
+  "feature_flags": {
+    "platform_admin": true,
+    "tenant_admin": true,
+    "platform_logs": true,
+    "multi_tenant_manage": true,
+    "factory_center": true,
+    "release_export": true
+  },
+  "release_profile": {
+    "key": "service_provider",
+    "label": "服务商版",
+    "summary": "双后台版本，适合服务商、多客户托管和 SaaS 运营。",
+    "docs_profile": "service_provider"
+  },
+  "app_id": "huadong_hospital",
+  "app_name": "华东协同医院",
+  "app_subtitle": "多专科智能体协同服务平台",
+  "chat_title": "华东协同医院智能体广场",
+  "chat_tagline": "为门诊导诊、检查解读、慢病随访、疫苗接种与医保咨询提供多 Agent 服务",
+  "welcome_message": "你好，这里是华东协同医院智能体广场。请选择适合你的专科助手开始咨询。",
+  "agent_description": "医院多智能体服务平台，支持每个专科助手绑定独立知识库、工作流、链接和业务规则。",
+  "logo": "",
+  "recommended_questions": [
+    "我应该先用哪个助手咨询体检报告？",
+    "想预约门诊并了解医保，需要找哪个助手？",
+    "老人慢病复诊和用药提醒应该用哪个助手？"
+  ],
+  "short_term_memory": {
+    "enabled": true,
+    "max_turns": 6,
+    "max_chars": 2400
+  },
+  "login_hint": "医院租户演示账号登录 · 支持多个智能体独立入口与统一切换",
+  "input_placeholder": "输入问题，或先切换到适合的医院助手...",
+  "send_button_text": "发送咨询",
+  "streaming": true,
+  "fallback_enabled": true,
+  "fallback_message": "针对您这个问题，我暂时还无法进行回答，请换一个问题吧。",
+  "show_recommended": true,
+  "record_chat_logs": true,
+  "factory_enabled": true,
+  "knowledge_namespace": "huadong_hospital",
+  "knowledge_tiers": {
+    "hotfix": {
+      "label": "L3 热库",
+      "weight": 3.0,
+      "desc": "高时效、随时变化的知识"
+    },
+    "seasonal": {
+      "label": "L2 增量库",
+      "weight": 2.0,
+      "desc": "阶段性更新、偶尔变更的知识"
+    },
+    "permanent": {
+      "label": "L1 基础库",
+      "weight": 1.0,
+      "desc": "长期稳定、基本不变的知识"
+    }
+  },
+  "theme": {
+    "bg": "#f4f8ff",
+    "bg_soft": "#f0fdf4",
+    "surface": "#ffffff",
+    "surface_strong": "#ffffff",
+    "line": "#d9e6fb",
+    "text": "#183153",
+    "muted": "#6981a3",
+    "accent": "#2563eb",
+    "accent_strong": "#194ab7",
+    "accent_soft": "rgba(37, 99, 235, 0.12)",
+    "warm": "#f59e0b",
+    "warm_soft": "rgba(245, 158, 11, 0.16)",
+    "danger": "#d55f61",
+    "primary": "#2563eb",
+    "primary_deep": "#194ab7",
+    "primary_soft": "rgba(37, 99, 235, 0.12)"
+  }
+}

@@ -12,6 +12,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from backend.app_config import get_knowledge_tiers, resolve_knowledge_tiers
 from backend.config import RAG_TOP_K
 from backend.embeddings import get_embedding_backend
+from backend.knowledge_assets import retrieval_scope_meta_matches
 from backend.retrieval_config import load_retrieval_config, resolve_qdrant_local_path
 
 try:
@@ -119,10 +120,8 @@ class LocalTfidfRetriever:
         try:
             q_vec = self._vectorizer.transform([query])
             raw_sims = cosine_similarity(q_vec, self._vectors)[0]
-            knowledge_tiers = tier_config or get_knowledge_tiers()
             weighted_sims = np.array([
                 raw_sims[i]
-                * knowledge_tiers.get(chunk_tiers[i], {}).get("weight", 1.0)
                 * chunk_source_weights[i]
                 for i in range(len(raw_sims))
             ])
@@ -132,7 +131,6 @@ class LocalTfidfRetriever:
                 if raw_sims[idx] <= 0.01:
                     continue
                 tier = chunk_tiers[idx]
-                tier_info = knowledge_tiers.get(tier, {})
                 results.append(
                     {
                         "content": chunks[idx],
@@ -140,7 +138,7 @@ class LocalTfidfRetriever:
                         "score": float(raw_sims[idx]),
                         "weighted_score": float(weighted_sims[idx]),
                         "tier": tier,
-                        "tier_label": tier_info.get("label", tier),
+                        "tier_label": tier,
                         "backend": "local_tfidf",
                     }
                 )
@@ -215,7 +213,6 @@ class BM25Retriever:
         query_terms = tokenize_text(query)
         if not query_terms:
             return []
-        knowledge_tiers = tier_config or get_knowledge_tiers()
         k1 = cfg["k1"]
         b = cfg["b"]
         raw_scores: list[float] = []
@@ -244,8 +241,7 @@ class BM25Retriever:
         for idx, raw_score in enumerate(raw_scores):
             normalized = raw_score / max_score
             tier = chunk_tiers[idx]
-            tier_weight = float(knowledge_tiers.get(tier, {}).get("weight", 1.0))
-            weighted_scores.append(normalized * tier_weight * float(chunk_source_weights[idx]))
+            weighted_scores.append(normalized * float(chunk_source_weights[idx]))
         top_indices = np.argsort(np.array(weighted_scores))[::-1][:top_k]
         results: list[dict] = []
         for idx in top_indices:
@@ -253,7 +249,6 @@ class BM25Retriever:
             if raw_score <= 0:
                 continue
             tier = chunk_tiers[idx]
-            tier_info = knowledge_tiers.get(tier, {})
             normalized = raw_score / max_score
             results.append(
                 {
@@ -262,7 +257,7 @@ class BM25Retriever:
                     "score": float(normalized),
                     "weighted_score": float(weighted_scores[idx]),
                     "tier": tier,
-                    "tier_label": tier_info.get("label", tier),
+                    "tier_label": tier,
                     "backend": "bm25",
                 }
             )
@@ -375,6 +370,7 @@ class QdrantRetriever:
         chunk_sources: list[str],
         chunk_tiers: list[str],
         chunk_source_weights: list[float],
+        chunk_scope_meta: list[dict] | None = None,
     ) -> dict:
         if not self.ensure_collection():
             return {"ok": False, "msg": self._last_error or "Qdrant 未就绪", "indexed": 0}
@@ -389,6 +385,7 @@ class QdrantRetriever:
         vectors = embedder.embed_many(chunks)
         points: list[PointStruct] = []
         for idx, content in enumerate(chunks):
+            scope_meta = dict((chunk_scope_meta or [])[idx] or {}) if chunk_scope_meta and idx < len(chunk_scope_meta) else {}
             points.append(
                 PointStruct(
                     id=idx + 1,
@@ -399,6 +396,11 @@ class QdrantRetriever:
                         "tier": chunk_tiers[idx],
                         "source_weight": float(chunk_source_weights[idx]),
                         "tenant_namespace": self._tenant_namespace,
+                        "library_id": str(scope_meta.get("library_id") or ""),
+                        "category_id": str(scope_meta.get("category_id") or ""),
+                        "tags": list(scope_meta.get("tags") or []),
+                        "file_key": str(scope_meta.get("file_key") or ""),
+                        "tier_code": str(scope_meta.get("tier_code") or ""),
                     },
                 )
             )
@@ -410,7 +412,7 @@ class QdrantRetriever:
             self._last_error = str(exc)
             return {"ok": False, "msg": str(exc), "indexed": 0}
 
-    def search(self, query: str, top_k: int = RAG_TOP_K) -> list[dict]:
+    def search(self, query: str, top_k: int = RAG_TOP_K, knowledge_scope: dict | None = None) -> list[dict]:
         if not self.ensure_collection():
             return []
         cfg = self._cfg().get("qdrant") or {}
@@ -437,15 +439,13 @@ class QdrantRetriever:
         except Exception as exc:
             self._last_error = str(exc)
             return []
-        knowledge_tiers = self._tiers()
         results: list[dict] = []
         for hit in hits:
             payload = hit.payload or {}
             tier = str(payload.get("tier") or "permanent")
-            tier_info = knowledge_tiers.get(tier, {})
             source_weight = float(payload.get("source_weight") or 1.0)
             score = float(hit.score or 0.0)
-            weighted_score = score * float(tier_info.get("weight", 1.0)) * source_weight
+            weighted_score = score * source_weight
             results.append(
                 {
                     "content": str(payload.get("content") or ""),
@@ -453,11 +453,27 @@ class QdrantRetriever:
                     "score": score,
                     "weighted_score": weighted_score,
                     "tier": tier,
-                    "tier_label": tier_info.get("label", tier),
+                    "tier_label": tier,
                     "backend": "qdrant",
+                    "library_id": str(payload.get("library_id") or ""),
+                    "category_id": str(payload.get("category_id") or ""),
+                    "tags": list(payload.get("tags") or []),
+                    "file_key": str(payload.get("file_key") or ""),
+                    "tier_code": str(payload.get("tier_code") or ""),
                 }
             )
-        return sorted(results, key=lambda item: item["weighted_score"], reverse=True)
+        filtered = [
+            item for item in results
+            if retrieval_scope_meta_matches(
+                {
+                    **item,
+                    "source": str(item.get("source") or ""),
+                    "tier": str(item.get("tier") or ""),
+                },
+                knowledge_scope,
+            )
+        ]
+        return sorted(filtered, key=lambda item: item["weighted_score"], reverse=True)
 
     def health(self) -> dict:
         cfg = self._cfg().get("qdrant") or {}

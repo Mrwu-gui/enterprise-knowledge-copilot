@@ -9,6 +9,7 @@ import time
 from backend.app_config import get_knowledge_tiers, get_runtime_knowledge_dir, resolve_knowledge_tiers
 from backend.config import RAG_CHUNK_SIZE
 from backend.document_processing import split_documents_for_stats
+from backend.knowledge_assets import resolve_retrieval_scope_meta, retrieval_scope_meta_matches
 from backend.langchain_components import build_langchain_retrieval_stack
 from backend.retrieval_config import load_retrieval_config
 from backend.retrievers import BM25Retriever, HybridRetriever, LocalTfidfRetriever, QdrantRetriever
@@ -38,6 +39,7 @@ class RAGEngine:
         self.chunk_sources: list[str] = []
         self.chunk_tiers: list[str] = []
         self.chunk_source_weights: list[float] = []
+        self.chunk_scope_meta: list[dict] = []
         self._last_build_time = 0.0
         self._local_retriever = LocalTfidfRetriever()
         self._bm25_retriever = BM25Retriever(config_data=self._retrieval_cfg())
@@ -68,21 +70,16 @@ class RAGEngine:
         docs: list[tuple[str, str, str]] = []
         knowledge_dir = self._runtime_knowledge_dir()
         knowledge_tiers = self._tier_cfg()
-        for tier_name in knowledge_tiers:
-            tier_dir = os.path.join(knowledge_dir, tier_name)
-            if not os.path.isdir(tier_dir):
+        pattern = os.path.join(knowledge_dir, "**", "*.md")
+        for fpath in glob.glob(pattern, recursive=True):
+            rel_path = os.path.relpath(fpath, knowledge_dir)
+            if rel_path.startswith(".upload_tmp") or f"/.upload_tmp/" in rel_path.replace("\\", "/"):
                 continue
-            pattern = os.path.join(tier_dir, "**", "*.md")
-            for fpath in glob.glob(pattern, recursive=True):
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-                fname = os.path.relpath(fpath, knowledge_dir)
-                docs.append((fname, content, tier_name))
-        for fpath in glob.glob(os.path.join(knowledge_dir, "*.md")):
             with open(fpath, "r", encoding="utf-8") as f:
                 content = f.read()
-            fname = os.path.basename(fpath)
-            docs.append((fname, content, "permanent"))
+            first_segment = rel_path.replace("\\", "/").split("/", 1)[0]
+            inferred_tier = first_segment if first_segment in knowledge_tiers else "permanent"
+            docs.append((rel_path, content, inferred_tier))
         return docs
 
     @staticmethod
@@ -175,13 +172,26 @@ class RAGEngine:
         self.chunk_sources = []
         self.chunk_tiers = []
         self.chunk_source_weights = []
+        self.chunk_scope_meta = []
         for fname, content, tier in docs:
             doc_weight = self._extract_doc_weight(content)
+            scope_meta = resolve_retrieval_scope_meta(
+                tenant_id=self._knowledge_namespace or "default",
+                source=fname,
+                tier=tier,
+            )
             for chunk_text, source in self._chunk_text(content, fname):
                 self.chunks.append(chunk_text)
                 self.chunk_sources.append(source)
                 self.chunk_tiers.append(tier)
                 self.chunk_source_weights.append(doc_weight)
+                self.chunk_scope_meta.append(
+                    {
+                        **scope_meta,
+                        "source": source,
+                        "tier": tier,
+                    }
+                )
         self._local_retriever.build(self.chunks)
         self._bm25_retriever.build(self.chunks)
         if self._retrieval_cfg().get("qdrant", {}).get("enabled"):
@@ -190,25 +200,63 @@ class RAGEngine:
                 self.chunk_sources,
                 self.chunk_tiers,
                 self.chunk_source_weights,
+                self.chunk_scope_meta,
             )
         self._last_build_time = time.time()
         return len(self.chunks)
 
-    def search(self, query: str, top_k: int = 5, backend_override: str | None = None) -> list[dict]:
+    def _scope_requires_local_prefilter(self, knowledge_scope: dict | None) -> bool:
+        scope = knowledge_scope if isinstance(knowledge_scope, dict) else {}
+        return any(scope.get(key) for key in ("libraries", "categories", "tags", "files"))
+
+    def _scoped_chunk_payload(self, knowledge_scope: dict | None) -> tuple[list[str], list[str], list[str], list[float]]:
+        if not self._scope_requires_local_prefilter(knowledge_scope):
+            return self.chunks, self.chunk_sources, self.chunk_tiers, self.chunk_source_weights
+        chunks: list[str] = []
+        sources: list[str] = []
+        tiers: list[str] = []
+        source_weights: list[float] = []
+        for idx, scope_meta in enumerate(self.chunk_scope_meta):
+            if not retrieval_scope_meta_matches(scope_meta, knowledge_scope):
+                continue
+            chunks.append(self.chunks[idx])
+            sources.append(self.chunk_sources[idx])
+            tiers.append(self.chunk_tiers[idx])
+            source_weights.append(self.chunk_source_weights[idx])
+        return chunks, sources, tiers, source_weights
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        backend_override: str | None = None,
+        knowledge_scope: dict | None = None,
+    ) -> list[dict]:
         """按当前检索后端执行搜索。"""
         backend = self._select_backend(backend_override=backend_override)
+        local_prefilter = self._scope_requires_local_prefilter(knowledge_scope)
+        scoped_chunks, scoped_sources, scoped_tiers, scoped_source_weights = self._scoped_chunk_payload(knowledge_scope)
+        if local_prefilter and backend in {"hybrid", "qdrant"}:
+            backend = "bm25" if self._bm25_retriever.health().get("ready") else "local_tfidf"
+        bm25_retriever = self._bm25_retriever
+        local_retriever = self._local_retriever
+        if local_prefilter:
+            bm25_retriever = BM25Retriever(config_data=self._retrieval_cfg())
+            bm25_retriever.build(scoped_chunks)
+            local_retriever = LocalTfidfRetriever()
+            local_retriever.build(scoped_chunks)
         candidate_limit = self._candidate_limit_for_config(top_k)
         results: list[dict]
         if backend == "hybrid":
             dense_results = []
             if self._qdrant_retriever.is_ready():
-                dense_results = self._qdrant_retriever.search(query, top_k=candidate_limit)
-            sparse_results = self._bm25_retriever.search(
+                dense_results = self._qdrant_retriever.search(query, top_k=candidate_limit, knowledge_scope=knowledge_scope)
+            sparse_results = bm25_retriever.search(
                 query=query,
-                chunks=self.chunks,
-                chunk_sources=self.chunk_sources,
-                chunk_tiers=self.chunk_tiers,
-                chunk_source_weights=self.chunk_source_weights,
+                chunks=scoped_chunks,
+                chunk_sources=scoped_sources,
+                chunk_tiers=scoped_tiers,
+                chunk_source_weights=scoped_source_weights,
                 top_k=candidate_limit,
                 tier_config=self._tier_cfg(),
             )
@@ -219,30 +267,30 @@ class RAGEngine:
                 top_k=candidate_limit,
             )
         elif backend == "qdrant":
-            qdrant_results = self._qdrant_retriever.search(query, top_k=candidate_limit)
+            qdrant_results = self._qdrant_retriever.search(query, top_k=candidate_limit, knowledge_scope=knowledge_scope)
             if qdrant_results:
                 results = qdrant_results
             else:
                 results = []
         elif backend == "bm25":
-            results = self._bm25_retriever.search(
+            results = bm25_retriever.search(
                 query=query,
-                chunks=self.chunks,
-                chunk_sources=self.chunk_sources,
-                chunk_tiers=self.chunk_tiers,
-                chunk_source_weights=self.chunk_source_weights,
+                chunks=scoped_chunks,
+                chunk_sources=scoped_sources,
+                chunk_tiers=scoped_tiers,
+                chunk_source_weights=scoped_source_weights,
                 top_k=candidate_limit,
                 tier_config=self._tier_cfg(),
             )
         else:
             results = []
         if not results:
-            results = self._local_retriever.search(
+            results = local_retriever.search(
                 query=query,
-                chunks=self.chunks,
-                chunk_sources=self.chunk_sources,
-                chunk_tiers=self.chunk_tiers,
-                chunk_source_weights=self.chunk_source_weights,
+                chunks=scoped_chunks,
+                chunk_sources=scoped_sources,
+                chunk_tiers=scoped_tiers,
+                chunk_source_weights=scoped_source_weights,
                 top_k=candidate_limit,
                 tier_config=self._tier_cfg(),
             )

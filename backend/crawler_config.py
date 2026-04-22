@@ -6,7 +6,6 @@ import os
 from copy import deepcopy
 
 from backend.config import PLATFORM_CRAWLER_CONFIG_PATH
-from backend.document_processing import normalize_tier
 from backend.tenant_config import ensure_tenant_storage, get_tenant_crawler_config_path
 
 
@@ -48,7 +47,6 @@ def load_crawler_sources(tenant_id: str | None = None, tenant_name: str = "") ->
         source_id = str(item.get("source_id", "")).strip()
         name = str(item.get("name", "")).strip()
         url = str(item.get("url", "")).strip()
-        tier = normalize_tier(str(item.get("tier", "seasonal")).strip() or "seasonal")
         if not source_id or not name or not url:
             continue
         refresh_hours = max(1, int(item.get("refresh_hours", 24) or 24))
@@ -62,7 +60,9 @@ def load_crawler_sources(tenant_id: str | None = None, tenant_name: str = "") ->
                 "source_id": source_id,
                 "name": name,
                 "url": url,
-                "tier": tier,
+                "tier": "permanent",
+                "library_id": str(item.get("library_id", "")).strip(),
+                "category_id": str(item.get("category_id", "")).strip(),
                 "source_type": "web",
                 "confidence": str(item.get("confidence", "B")).strip().upper() or "B",
                 "parser": str(item.get("parser", "generic")).strip() or "generic",
@@ -113,7 +113,9 @@ def save_crawler_sources(items: list[dict], tenant_id: str | None = None, tenant
                 "source_id": source_id,
                 "name": name,
                 "url": url,
-                "tier": normalize_tier(str(item.get("tier", "seasonal")).strip() or "seasonal"),
+                "tier": "permanent",
+                "library_id": str(item.get("library_id", "")).strip(),
+                "category_id": str(item.get("category_id", "")).strip(),
                 "source_type": "web",
                 "confidence": str(item.get("confidence", "B")).strip().upper() or "B",
                 "parser": str(item.get("parser", "generic")).strip() or "generic",

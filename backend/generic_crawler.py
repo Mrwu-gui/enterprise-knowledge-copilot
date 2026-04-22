@@ -280,14 +280,15 @@ def _apply_rules(lines: list[str], html: str, rule_text: str, default_limit: int
 
 def _build_markdown(source: dict, title: str, lines: list[str]) -> str:
     """拼装入库 Markdown。"""
-    public_tier = str(source.get("tier") or "seasonal").strip() or "seasonal"
-    tier = normalize_tier(public_tier)
     questions = [str(item).strip() for item in source.get("questions", []) if str(item).strip()]
     notes = str(source.get("notes") or "").strip()
+    library_label = str(source.get("library_name") or source.get("library_id") or "默认知识库").strip() or "默认知识库"
+    category_label = str(source.get("category_name") or source.get("category_id") or "未分类").strip() or "未分类"
     tags = [
         "#采集",
-        f"#{tier}",
         f"#{str(source.get('source_type') or 'web')}",
+        f"#{library_label}",
+        f"#{category_label}",
     ]
     body = [
         "# " + (title or source.get("name") or "未命名页面"),
@@ -296,7 +297,8 @@ def _build_markdown(source: dict, title: str, lines: list[str]) -> str:
         f"- 来源名称：{source.get('name', '')}",
         f"- 来源地址：{source.get('url', '')}",
         f"- 来源类型：{source.get('source_type', 'web')}",
-        f"- 目标知识库：{public_tier}",
+        f"- 目标知识库：{library_label}",
+        f"- 目标分类：{category_label}",
     ]
     if notes:
         body.append(f"- 备注：{notes}")
@@ -312,7 +314,7 @@ def _build_markdown(source: dict, title: str, lines: list[str]) -> str:
         [
             "",
             f"Tag: {' '.join(tags)}",
-            f"搜索关键词：{source.get('name', '')}，{source.get('source_id', '')}，{tier}，正文，规则抽取",
+            f"搜索关键词：{source.get('name', '')}，{source.get('source_id', '')}，{library_label}，{category_label}，正文，规则抽取",
         ]
     )
     return "\n".join(body).strip() + "\n"
@@ -349,10 +351,6 @@ def _user_facing_fetch_error(exc: Exception, url: str) -> str:
 
 def run_generic_crawler(source: dict, knowledge_root: str) -> GenericCrawlerResult:
     """执行单条通用采集任务并写入知识库。"""
-    public_tier = str(source.get("tier") or "seasonal").strip() or "seasonal"
-    tier = normalize_tier(public_tier)
-    if tier not in get_knowledge_tiers():
-        raise ValueError("无效的目标知识库层级")
     url = str(source.get("url") or "").strip()
     if not url:
         raise ValueError("缺少数据源地址")
@@ -381,17 +379,19 @@ def run_generic_crawler(source: dict, knowledge_root: str) -> GenericCrawlerResu
             f"正文抽取失败：页面已访问成功，但没有识别出可入库正文。该页面可能是动态渲染页面、正文结构过于复杂，或当前页面主要是导航/列表页。URL: {url}"
         )
 
-    tier_dir = Path(knowledge_root) / tier
-    tier_dir.mkdir(parents=True, exist_ok=True)
+    library_id = _safe_filename(str(source.get("library_id") or "kb_default"))
+    category_id = _safe_filename(str(source.get("category_id") or "uncategorized"))
+    target_dir = Path(knowledge_root) / library_id / category_id
+    target_dir.mkdir(parents=True, exist_ok=True)
     output_name = _safe_filename(str(source.get("source_id") or "source"))
-    output_path = tier_dir / output_name
+    output_path = target_dir / output_name
     output_path.write_text(_build_markdown(source, title, final_lines), encoding="utf-8")
 
     return GenericCrawlerResult(
         ok=True,
         source_id=str(source.get("source_id") or ""),
         source_name=str(source.get("name") or ""),
-        tier=tier,
+        tier="permanent",
         items_count=len(final_lines),
         output_file=str(output_path),
         title=title,

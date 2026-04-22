@@ -1,0 +1,1389 @@
+{
+  "default_workflow_id": "wf_report_interpreter",
+  "items": [
+    {
+      "workflow_id": "wf_report_interpreter",
+      "name": "报告解读助手流程",
+      "description": "报告解读助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 100,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "报告解读助手检索",
+            "description": "检索报告解读知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_report_interpreter",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成报告解读助手答复",
+            "description": "根据报告解读知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院医学检验与影像中心的“报告解读助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 检查项目名称\n- 异常指标或报告结论\n- 是否有症状/既往病史\n- 检查时间\n4. 回答尽量覆盖以下结构：\n- 检查结果怎么理解\n- 常见原因或背景解释\n- 建议多久复查/挂什么门诊\n- 哪些信号需要尽快线下复诊\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "报告解读助手",
+        "chat_tagline": "负责检验单、影像检查和复查建议的患者友好型解释，不替代临床诊断。",
+        "welcome_message": "你好，我是报告解读助手。你可以输入检验指标、影像结论或复查问题，我会先按医院知识口径做解释。",
+        "agent_description": "负责检验单、影像检查和复查建议的患者友好型解释，不替代临床诊断。",
+        "recommended_questions": [
+          "这份血常规里白细胞偏高是什么意思？",
+          "CT 报告里的磨玻璃结节怎么理解？",
+          "肝功能轻度异常需要多久复查？"
+        ],
+        "input_placeholder": "输入检验指标、报告结论或你想了解的复查建议...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院医学检验与影像中心的“报告解读助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_health_check_assistant",
+      "name": "体检报告助手流程",
+      "description": "用于体检报告结构化解析、风险分层、追问补充和报告生成。",
+      "enabled": true,
+      "sort_order": 150,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "script_1",
+          "type": "script",
+          "x": 330,
+          "y": 180,
+          "data": {
+            "label": "结构化解析",
+            "description": "从自然语言中提取体检指标并计算风险分层、图表数据。",
+            "scriptType": "Python",
+            "timeout": 20,
+            "code": "            import json\n            import re\n\n            text = str(((ctx.get(\"input\") or {}).get(\"text\")) or \"\").strip()\n\n            def pick_first(patterns):\n                for pattern in patterns:\n                    match = re.search(pattern, text, re.IGNORECASE)\n                    if match:\n                        value = str(match.group(1) or \"\").strip()\n                        if value:\n                            return value\n                return \"\"\n\n            def pick_number(patterns):\n                for pattern in patterns:\n                    match = re.search(pattern, text, re.IGNORECASE)\n                    if not match:\n                        continue\n                    raw = str(match.group(1) or \"\").strip().replace(\"，\", \".\").replace(\",\", \".\")\n                    try:\n                        return float(raw)\n                    except Exception:\n                        continue\n                return None\n\n            name = pick_first([\n                r\"(?:姓名|名字)[:：\\s]*([\\u4e00-\\u9fa5A-Za-z·]{2,20})\",\n                r\"患者([\\u4e00-\\u9fa5A-Za-z·]{2,20})\",\n            ])\n            gender = pick_first([r\"(?:性别)[:：\\s]*(男|女)\"])\n            if not gender:\n                if \"男\" in text and \"女\" not in text:\n                    gender = \"男\"\n                elif \"女\" in text and \"男\" not in text:\n                    gender = \"女\"\n\n            age = pick_number([r\"(?:年龄|age)[:：\\s]*([0-9]{1,3})\", r\"([0-9]{1,3})\\s*岁\"])\n            sbp = pick_number([r\"(?:收缩压|高压)[:：\\s]*([0-9]{2,3}(?:\\.[0-9]+)?)\"])\n            dbp = pick_number([r\"(?:舒张压|低压)[:：\\s]*([0-9]{2,3}(?:\\.[0-9]+)?)\"])\n            if sbp is None or dbp is None:\n                bp_match = re.search(r\"血压[:：\\s]*([0-9]{2,3}(?:\\.[0-9]+)?)\\s*[\\/／]\\s*([0-9]{2,3}(?:\\.[0-9]+)?)\", text, re.IGNORECASE)\n                if bp_match:\n                    try:\n                        sbp = float(bp_match.group(1))\n                        dbp = float(bp_match.group(2))\n                    except Exception:\n                        pass\n\n            metrics = [\n                {\"key\": \"fasting_glucose\", \"label\": \"空腹血糖\", \"unit\": \"mmol/L\", \"value\": pick_number([r\"(?:空腹血糖|血糖|GLU)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 3.9, \"high\": 6.1, \"critical_high\": 7.0},\n                {\"key\": \"tc\", \"label\": \"总胆固醇\", \"unit\": \"mmol/L\", \"value\": pick_number([r\"(?:总胆固醇|胆固醇|TC)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 0.0, \"high\": 5.2, \"critical_high\": 6.2},\n                {\"key\": \"tg\", \"label\": \"甘油三酯\", \"unit\": \"mmol/L\", \"value\": pick_number([r\"(?:甘油三酯|TG)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 0.0, \"high\": 1.7, \"critical_high\": 2.3},\n                {\"key\": \"hdl\", \"label\": \"高密度脂蛋白\", \"unit\": \"mmol/L\", \"value\": pick_number([r\"(?:高密度脂蛋白|HDL)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 1.0, \"high\": 9.9, \"critical_low\": 0.9},\n                {\"key\": \"ldl\", \"label\": \"低密度脂蛋白\", \"unit\": \"mmol/L\", \"value\": pick_number([r\"(?:低密度脂蛋白|LDL)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 0.0, \"high\": 3.4, \"critical_high\": 4.1},\n                {\"key\": \"bmi\", \"label\": \"BMI\", \"unit\": \"\", \"value\": pick_number([r\"(?:BMI|体重指数)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 18.5, \"high\": 24.0, \"critical_high\": 28.0},\n                {\"key\": \"uric_acid\", \"label\": \"尿酸\", \"unit\": \"umol/L\", \"value\": pick_number([r\"(?:尿酸|UA)[:：\\s]*([0-9]+(?:\\.[0-9]+)?)\"]), \"low\": 0.0, \"high\": 420.0, \"critical_high\": 480.0},\n            ]\n\n            if sbp is not None:\n                metrics.append({\"key\": \"sbp\", \"label\": \"收缩压\", \"unit\": \"mmHg\", \"value\": sbp, \"low\": 90.0, \"high\": 140.0, \"critical_high\": 160.0})\n            if dbp is not None:\n                metrics.append({\"key\": \"dbp\", \"label\": \"舒张压\", \"unit\": \"mmHg\", \"value\": dbp, \"low\": 60.0, \"high\": 90.0, \"critical_high\": 100.0})\n\n            abnormal_items = []\n            normal_count = 0\n            high_count = 0\n            low_count = 0\n            risk_score = 0\n            measured_count = 0\n\n            for item in metrics:\n                value = item.get(\"value\")\n                if value is None:\n                    continue\n                measured_count += 1\n                status = \"正常\"\n                reason = \"\"\n                if item[\"key\"] == \"hdl\":\n                    if value < item.get(\"critical_low\", item[\"low\"]):\n                        status = \"偏低\"\n                        low_count += 1\n                        risk_score += 2\n                        reason = \"保护性脂蛋白偏低\"\n                    elif value < item[\"low\"]:\n                        status = \"偏低\"\n                        low_count += 1\n                        risk_score += 1\n                        reason = \"保护性脂蛋白略低\"\n                    else:\n                        normal_count += 1\n                else:\n                    if value > item.get(\"critical_high\", item[\"high\"]):\n                        status = \"偏高\"\n                        high_count += 1\n                        risk_score += 2\n                        reason = \"明显高于参考范围\"\n                    elif value > item[\"high\"]:\n                        status = \"偏高\"\n                        high_count += 1\n                        risk_score += 1\n                        reason = \"高于参考范围\"\n                    elif item[\"low\"] and value < item[\"low\"]:\n                        status = \"偏低\"\n                        low_count += 1\n                        risk_score += 1\n                        reason = \"低于参考范围\"\n                    else:\n                        normal_count += 1\n                item[\"status\"] = status\n                item[\"reason\"] = reason\n                item[\"reference\"] = f'{item[\"low\"]}-{item[\"high\"]}' if item[\"high\"] else f'>={item[\"low\"]}'\n                if status != \"正常\":\n                    abnormal_items.append(item)\n\n            if any(item[\"key\"] == \"fasting_glucose\" and item[\"value\"] and item[\"value\"] >= 7.0 for item in metrics):\n                risk_score += 1\n            if any(item[\"key\"] == \"ldl\" and item[\"value\"] and item[\"value\"] >= 4.1 for item in metrics):\n                risk_score += 1\n            if sbp is not None and dbp is not None and (sbp >= 160 or dbp >= 100):\n                risk_score += 2\n\n            if risk_score >= 6:\n                risk_level = \"高风险\"\n            elif risk_score >= 3:\n                risk_level = \"中风险\"\n            else:\n                risk_level = \"低风险\"\n\n            missing_fields = []\n            if not name:\n                missing_fields.append(\"姓名\")\n            if not gender:\n                missing_fields.append(\"性别\")\n            if age is None:\n                missing_fields.append(\"年龄\")\n            if measured_count < 2:\n                missing_fields.append(\"至少 2 项核心体检指标（如空腹血糖、甘油三酯、LDL、血压、BMI）\")\n\n            analysis_query_terms = [item[\"label\"] for item in abnormal_items[:6]]\n            if not analysis_query_terms:\n                analysis_query_terms = [\"体检报告\", \"血糖\", \"血脂\", \"血压\", \"BMI\"]\n\n            profile = {\n                \"name\": name or \"未提供\",\n                \"gender\": gender or \"未提供\",\n                \"age\": int(age) if age is not None else \"未提供\",\n            }\n\n            metrics_rows = []\n            for item in metrics:\n                value = item.get(\"value\")\n                if value is None:\n                    continue\n                metrics_rows.append(\n                    {\n                        \"label\": item[\"label\"],\n                        \"value\": value,\n                        \"unit\": item[\"unit\"],\n                        \"status\": item[\"status\"],\n                        \"reference\": item[\"reference\"],\n                        \"reason\": item[\"reason\"],\n                    }\n                )\n\n            summary = {\n                \"risk_level\": risk_level,\n                \"measured_count\": measured_count,\n                \"abnormal_count\": len(abnormal_items),\n                \"normal_count\": normal_count,\n                \"high_count\": high_count,\n                \"low_count\": low_count,\n                \"key_findings\": [item[\"label\"] + item[\"status\"] for item in abnormal_items[:5]],\n            }\n\n            chart_spec = {\n                \"version\": \"v1\",\n                \"cards\": [\n                    {\"label\": \"风险等级\", \"value\": risk_level},\n                    {\"label\": \"异常项\", \"value\": len(abnormal_items)},\n                    {\"label\": \"已识别指标\", \"value\": measured_count},\n                ],\n                \"charts\": [\n                    {\n                        \"type\": \"donut\",\n                        \"title\": \"指标状态分布\",\n                        \"data\": [\n                            {\"name\": \"正常\", \"value\": normal_count},\n                            {\"name\": \"偏高\", \"value\": high_count},\n                            {\"name\": \"偏低\", \"value\": low_count},\n                        ],\n                    }\n                ],\n            }\n\n            markdown_lines = [\"| 指标 | 数值 | 状态 | 参考范围 |\", \"| --- | --- | --- | --- |\"]\n            for row in metrics_rows:\n                value_text = f'{row[\"value\"]}{row[\"unit\"]}' if row[\"unit\"] else str(row[\"value\"])\n                markdown_lines.append(f'| {row[\"label\"]} | {value_text} | {row[\"status\"]} | {row[\"reference\"]} |')\n\n            health_focus_items = []\n            if any(item[\"key\"] == \"fasting_glucose\" and item[\"status\"] != \"正常\" for item in abnormal_items):\n                health_focus_items.append({\n                    \"title\": \"血糖管理关注\",\n                    \"content\": \"本次结果提示血糖指标存在异常，建议结合饮食结构、体重变化和既往血糖情况综合评估，并按时复查空腹血糖或糖化血红蛋白。\"\n                })\n            if any(item[\"key\"] in {\"tc\", \"tg\", \"ldl\", \"hdl\"} and item[\"status\"] != \"正常\" for item in abnormal_items):\n                health_focus_items.append({\n                    \"title\": \"血脂代谢关注\",\n                    \"content\": \"本次结果提示血脂代谢存在关注点，建议控制油脂和精制糖摄入，结合运动与体重管理观察变化。\"\n                })\n            if any(item[\"key\"] in {\"sbp\", \"dbp\"} and item[\"status\"] != \"正常\" for item in abnormal_items):\n                health_focus_items.append({\n                    \"title\": \"血压监测关注\",\n                    \"content\": \"如近期有波动或既往存在血压偏高情况，建议结合家庭血压监测结果和线下复评综合判断。\"\n                })\n            if any(item[\"key\"] == \"bmi\" and item[\"status\"] != \"正常\" for item in abnormal_items):\n                health_focus_items.append({\n                    \"title\": \"体重管理关注\",\n                    \"content\": \"体重相关指标提示代谢管理压力，建议同步关注腰围、饮食结构、运动频率和睡眠作息。\"\n                })\n            if not health_focus_items:\n                health_focus_items.append({\n                    \"title\": \"健康管理建议\",\n                    \"content\": \"本次已识别指标整体较平稳，建议保持规律作息、合理饮食和年度健康体检习惯。\"\n                })\n\n            followup_rows = []\n            for item in abnormal_items[:5]:\n                clinic = \"健康管理门诊\"\n                if item[\"key\"] in {\"fasting_glucose\"}:\n                    clinic = \"内分泌科 / 健康管理门诊\"\n                elif item[\"key\"] in {\"tc\", \"tg\", \"ldl\", \"hdl\"}:\n                    clinic = \"心内科 / 健康管理门诊\"\n                elif item[\"key\"] in {\"sbp\", \"dbp\"}:\n                    clinic = \"心内科 / 高血压门诊\"\n                elif item[\"key\"] == \"uric_acid\":\n                    clinic = \"风湿免疫科 / 肾内科\"\n                followup_rows.append({\n                    \"item\": item[\"label\"],\n                    \"action\": \"建议结合近期情况复查并持续观察\",\n                    \"timing\": \"建议 1-3 个月内复评\",\n                    \"clinic\": clinic,\n                })\n\n            report_note_lines = [\n                f\"本次共识别 {measured_count} 项指标，其中 {len(abnormal_items)} 项提示需重点关注。\",\n                \"本页展示结果主要用于健康管理参考和体检结果解读，不替代门诊病历、检验正式报告或临床诊断意见。\",\n                \"如存在持续不适、指标明显升高或既往慢病史，建议尽快到相应专科进一步评估。\"\n            ]\n\n            render_payload = {\n                \"type\": \"structured_report\",\n                \"title\": \"体检报告摘要\",\n                \"subtitle\": \"基于已录入体检指标完成风险分层、指标汇总、重点关注项提炼和复查建议整理。\",\n                \"profile_items\": [\n                    {\"label\": \"姓名\", \"value\": profile[\"name\"]},\n                    {\"label\": \"性别\", \"value\": profile[\"gender\"]},\n                    {\"label\": \"年龄\", \"value\": profile[\"age\"]},\n                ],\n                \"cards\": [\n                    {\"label\": \"风险等级\", \"value\": risk_level},\n                    {\"label\": \"异常项数量\", \"value\": len(abnormal_items)},\n                    {\"label\": \"已识别指标\", \"value\": measured_count},\n                    {\"label\": \"正常项数量\", \"value\": normal_count},\n                    {\"label\": \"偏高项数量\", \"value\": high_count},\n                    {\"label\": \"偏低项数量\", \"value\": low_count},\n                ],\n                \"tables\": [\n                    {\n                        \"title\": \"指标明细\",\n                        \"columns\": [\n                            {\"key\": \"label\", \"label\": \"指标\"},\n                            {\"key\": \"display_value\", \"label\": \"数值\"},\n                            {\"key\": \"status\", \"label\": \"状态\", \"kind\": \"status\"},\n                            {\"key\": \"reference\", \"label\": \"参考范围\"},\n                            {\"key\": \"reason\", \"label\": \"提示\"},\n                        ],\n                        \"rows\": [\n                            {\n                                \"label\": item[\"label\"],\n                                \"display_value\": f'{item[\"value\"]}{item[\"unit\"]}' if item[\"unit\"] else str(item[\"value\"]),\n                                \"status\": item[\"status\"],\n                                \"reference\": item[\"reference\"],\n                                \"reason\": item[\"reason\"] or \"处于参考范围内\",\n                            }\n                            for item in metrics_rows\n                        ],\n                    },\n                    {\n                        \"title\": \"复查与就诊建议\",\n                        \"columns\": [\n                            {\"key\": \"item\", \"label\": \"关注指标\"},\n                            {\"key\": \"action\", \"label\": \"建议\"},\n                            {\"key\": \"timing\", \"label\": \"建议时点\"},\n                            {\"key\": \"clinic\", \"label\": \"建议门诊\"},\n                        ],\n                        \"rows\": followup_rows or [{\n                            \"item\": \"当前未识别明显异常项\",\n                            \"action\": \"建议保持年度体检和规律健康管理\",\n                            \"timing\": \"建议按年度复查\",\n                            \"clinic\": \"健康管理门诊\",\n                        }],\n                    },\n                ],\n                \"charts\": chart_spec[\"charts\"],\n                \"sections\": [\n                    {\n                        \"title\": \"重点关注项\",\n                        \"items\": [\n                            {\n                                \"title\": f'{item[\"label\"]} {item[\"status\"]}',\n                                \"content\": f'当前结果 {item[\"value\"]}{item[\"unit\"]}，参考范围 {item[\"reference\"]}。{item[\"reason\"] or \"建议结合线下复查继续判断。\"}'\n                            }\n                            for item in abnormal_items[:4]\n                        ],\n                    }\n                ] if abnormal_items else [],\n                \"sections_extra\": [\n                    {\n                        \"title\": \"健康管理提示\",\n                        \"items\": health_focus_items,\n                    },\n                    {\n                        \"title\": \"报告说明\",\n                        \"items\": [{\"content\": line} for line in report_note_lines],\n                    },\n                ],\n            }\n\n            result = {\n                \"profile\": profile,\n                \"summary\": summary,\n                \"metrics\": metrics_rows,\n                \"abnormal_items\": abnormal_items,\n                \"missing_fields\": missing_fields,\n                \"missing_required\": measured_count < 2,\n                \"analysis_query\": \"体检报告 解读 \" + \" \".join(analysis_query_terms),\n                \"chart_spec\": chart_spec,\n                \"profile_json\": json.dumps(profile, ensure_ascii=False),\n                \"summary_json\": json.dumps(summary, ensure_ascii=False),\n                \"metrics_json\": json.dumps(metrics_rows, ensure_ascii=False),\n                \"chart_json\": json.dumps(chart_spec, ensure_ascii=False),\n                \"metrics_markdown\": \"\\n\".join(markdown_lines),\n                \"render_payload\": render_payload,\n            }"
+          }
+        },
+        {
+          "id": "condition_1",
+          "type": "condition",
+          "x": 590,
+          "y": 180,
+          "data": {
+            "label": "信息是否足够",
+            "description": "判断是否已提供至少两项核心体检指标。",
+            "condition": "nodes.script_1.result.result.missing_required == True"
+          }
+        },
+        {
+          "id": "ai_followup",
+          "type": "ai",
+          "x": 860,
+          "y": 70,
+          "data": {
+            "label": "生成补充追问",
+            "description": "缺信息时先追问，不直接输出完整报告。",
+            "prompt": "你是华东协同医院体检中心的“体检报告助手”，现在处于信息补全阶段。\n\n【用户原始输入】\n{{input.text}}\n\n【已提取画像】\n{{nodes.script_1.result.result.profile_json}}\n\n【缺失字段】\n{{nodes.script_1.result.result.missing_fields}}\n\n【你的任务】\n请像体检中心导检人员或健康管理师一样，先说明“当前信息已经足够做初步判断”，再告诉用户为了把报告写成一份更完整、更正规的体检解读，还需要补充哪些关键数据。\n\n【输出要求】\n1. 第一段先概括目前已掌握的信息，例如已提供了年龄、性别或部分异常指标。\n2. 第二段再说明还缺哪些关键字段，以及这些字段会影响哪部分解读，例如风险分层、复查建议、综合判断。\n3. 只追问最必要的 2 到 4 项，不要像问卷，不要一次把所有项目都抛给用户。\n4. 如果姓名/性别/年龄缺失，可以简短提醒；如果只是缺指标，优先追问空腹血糖、血脂、血压、BMI、尿酸这类核心项。\n5. 语气自然、专业、像医院健康管理中心服务人员，不要出现“作为AI”“信息不足无法判断”等生硬模板话。\n6. 最后一行单独给一个可直接照抄的补充示例，方便用户继续输入。\n7. 整体控制在 6 到 8 行，简洁但不能敷衍。",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 860,
+          "y": 290,
+          "data": {
+            "label": "体检知识检索",
+            "description": "检索体检参考范围、复查建议和解读话术。",
+            "query": "{{nodes.script_1.result.result.analysis_query}}",
+            "knowledgeBase": "kb_health_check_assistant",
+            "topK": 4,
+            "threshold": 0.05
+          }
+        },
+        {
+          "id": "ai_report",
+          "type": "ai",
+          "x": 1160,
+          "y": 290,
+          "data": {
+            "label": "生成体检报告",
+            "description": "根据结构化指标和知识库结果输出正式体检解读报告。",
+            "prompt": "你是华东协同医院体检中心的“体检报告助手”。你的职责不是替代医生做诊断，而是把体检数据整理成一份像大型医院体检中心或健康管理中心会正式展示给客户的体检解读报告：版式清晰、结论稳重、解释具体、建议明确、具备服务感。\n\n【用户原始输入】\n{{input.text}}\n\n【用户画像】\n{{nodes.script_1.result.result.profile_json}}\n\n【风险摘要】\n{{nodes.script_1.result.result.summary_json}}\n\n【结构化指标】\n{{nodes.script_1.result.result.metrics_json}}\n\n【表格版指标】\n{{nodes.script_1.result.result.metrics_markdown}}\n\n【基础图表规格】\n{{nodes.script_1.result.result.chart_json}}\n\n【知识库依据】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【任务目标】\n请输出一份正式、详细、适合客户展示的体检解读 HTML 报告。\n\n【输出协议】\n1. 只返回 HTML 片段，不要返回 JSON，不要返回 Markdown，不要加代码块，不要解释格式。\n2. 可以使用这些标签：div、section、h2、h3、p、ul、li、table、thead、tbody、tr、th、td、strong、span。\n3. 不要写 html、body、style、script 标签；只输出内容片段。\n4. 表格必须用标准 HTML table 输出，不要再用 Markdown 表格。\n5. 如果本次已有结构化图表或摘要卡片在前台显示，不要在正文里重复写“结构化结果”“前台统一渲染”等系统说明。\n\n【版式结构】\n请严格按下面顺序输出：\n1. `<section>` 体检结论摘要\n2. `<section>` 主要异常指标说明\n3. `<section>` 健康风险提示\n4. `<section>` 健康管理与复查建议\n5. `<section>` 就医提醒与报告说明\n\n【写作要求】\n1. 语言要像医院体检中心或健康管理中心的正式服务报告，详细、稳重、可信；不要口语化，不要像聊天。\n2. “主要异常指标说明”要逐条展开，每一项都要说明当前数值、参考范围差异、提示的风险方向和关注原因。\n3. “健康管理与复查建议”必须具体，至少覆盖饮食、运动、体重、作息、复查项目、复查时点和建议门诊。\n4. 至少输出 2 张 HTML 表格：\n   - 指标明细表\n   - 复查与就诊建议表\n5. 禁止输出：确诊、处方、手术方案、药品剂量、治疗承诺。\n6. 结尾必须补一句正式边界提醒：本结果仅用于健康管理建议，正式诊断请以临床医生意见为准。\n7. 直接输出 HTML 内容，不要出现 `answer_text`、`render_payload`、`structured_report` 这些系统字段名。",
+            "model": "__default__",
+            "temperature": 0.25
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1450,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "script_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "script_1",
+          "to": "condition_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "condition_1",
+          "to": "ai_followup",
+          "label": "信息不足"
+        },
+        {
+          "id": "c4",
+          "from": "condition_1",
+          "to": "knowledge_1",
+          "label": "信息充分"
+        },
+        {
+          "id": "c5",
+          "from": "knowledge_1",
+          "to": "ai_report",
+          "label": ""
+        },
+        {
+          "id": "c6",
+          "from": "ai_followup",
+          "to": "end_1",
+          "label": ""
+        },
+        {
+          "id": "c7",
+          "from": "ai_report",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "体检报告助手",
+        "chat_tagline": "支持自然语言录入体检指标，自动完成结构化解析、风险分层、图表汇总，并生成更接近大型医院体检中心风格的正式解读报告。",
+        "welcome_message": "你好，我是华东协同医院体检中心的体检报告助手。你可以直接输入姓名、年龄、性别，以及空腹血糖、血脂、血压、BMI、尿酸等体检指标。我会先把数据整理为结构化结果，再输出一份包含体检结论摘要、异常指标说明、风险提示、复查建议和健康管理建议的正式报告。",
+        "agent_description": "面向体检中心和健康管理场景，支持灵活输入体检数据，自动生成结构化报告卡片、异常项分析、图表汇总、复查建议和更接近大型医院体检中心风格的正式解读。",
+        "recommended_questions": [
+          "姓名张三，男，45岁，空腹血糖6.8，甘油三酯2.4，LDL 4.1，帮我出一份体检解读",
+          "王女士 52 岁，总胆固醇 6.5、HDL 0.9、BMI 29，这份体检报告风险大吗？请给我一份详细一点的报告",
+          "李先生 39 岁，血压 148/96、空腹血糖 7.2、尿酸 480，帮我生成一份包含复查建议和生活方式建议的体检解读"
+        ],
+        "input_placeholder": "输入姓名、年龄、性别和体检指标，例如：男 45岁，空腹血糖6.8，TG 2.4，LDL 4.1，BMI 28.2",
+        "send_button_text": "生成解读"
+      },
+      "system_prompt": "你是华东协同医院体检中心的“体检报告助手”。\n你的职责是把用户输入的体检数据转化成一份更像大型医院体检中心或健康管理中心正式交付给客户的解读报告，而不是普通聊天回复。\n请优先根据结构化分析结果和知识库内容输出，不得脱离依据编造。\n可以给出健康管理建议、复查建议和就诊建议，但不得输出确诊、用药、处方和治疗方案。\n输出风格应正式、完整、稳重，避免口语化、模板化、过短或明显敷衍的表述。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_diagnosis_assistant",
+      "name": "辅助诊断助手流程",
+      "description": "辅助诊断助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 200,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "辅助诊断助手检索",
+            "description": "检索辅助诊断知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_diagnosis_assistant",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "mcp_1",
+          "type": "mcp",
+          "x": 650,
+          "y": 180,
+          "data": {
+            "label": "辅助诊断助手规则核验",
+            "description": "调用医院规则系统辅助判断",
+            "serverId": "clinical-pathway-center",
+            "toolName": "query_clinical_pathway",
+            "payload": "{\"question\": \"{{input.text}}\", \"knowledge\": \"{{nodes.knowledge_1.result.knowledge_text}}\"}"
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 940,
+          "y": 180,
+          "data": {
+            "label": "生成辅助诊断助手答复",
+            "description": "根据辅助诊断知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院全科与专科分诊中心的“辅助诊断助手”。\n你必须严格根据用户问题、知识库命中内容以及规则系统返回结果来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【规则系统结果】\n{{nodes.mcp_1.result.result}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 主要症状\n- 持续时间\n- 年龄/特殊人群\n- 是否有胸痛、呼吸困难、意识改变等红旗症状\n4. 回答尽量覆盖以下结构：\n- 风险分层结论\n- 建议先去哪个科/是否急诊\n- 到院前要准备什么\n- 哪些情况立刻就医\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1240,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "mcp_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "mcp_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "辅助诊断助手",
+        "chat_tagline": "负责主诉分诊、危险信号识别和推荐科室建议，结合临床路径和知识库输出。",
+        "welcome_message": "你好，我是辅助诊断助手。你可以描述主诉、症状持续时间和既往病史，我会给出就诊分层建议。",
+        "agent_description": "负责主诉分诊、危险信号识别和推荐科室建议，结合临床路径和知识库输出。",
+        "recommended_questions": [
+          "胸闷心慌伴头晕应该挂什么科？",
+          "反复咳嗽三周需要先看全科还是呼吸科？",
+          "高血压老人突然头痛需要急诊吗？"
+        ],
+        "input_placeholder": "输入症状、持续时间、既往病史或检查结果片段...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院全科与专科分诊中心的“辅助诊断助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_appointment_assistant",
+      "name": "智能预约助手流程",
+      "description": "智能预约助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 300,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "智能预约助手检索",
+            "description": "检索智能预约知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_appointment_assistant",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "mcp_1",
+          "type": "mcp",
+          "x": 650,
+          "y": 180,
+          "data": {
+            "label": "智能预约助手规则核验",
+            "description": "调用医院规则系统辅助判断",
+            "serverId": "insurance-rule-center",
+            "toolName": "check_insurance_coverage",
+            "payload": "{\"question\": \"{{input.text}}\", \"knowledge\": \"{{nodes.knowledge_1.result.knowledge_text}}\"}"
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 940,
+          "y": 180,
+          "data": {
+            "label": "生成智能预约助手答复",
+            "description": "根据智能预约知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院门诊预约与医保服务中心的“智能预约助手”。\n你必须严格根据用户问题、知识库命中内容以及规则系统返回结果来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【规则系统结果】\n{{nodes.mcp_1.result.result}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 想看的科室或检查项目\n- 初诊/复诊\n- 期望时间\n- 医保类型/是否异地医保\n4. 回答尽量覆盖以下结构：\n- 是否可这样预约\n- 推荐预约路径\n- 需要准备的证件/材料\n- 哪些情况需转人工窗口\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1240,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "mcp_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "mcp_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "智能预约助手",
+        "chat_tagline": "负责门诊挂号、复诊预约、检查排期和医保准备材料说明。",
+        "welcome_message": "你好，我是智能预约助手。你可以咨询挂号、复诊、检查预约和医保资料准备。",
+        "agent_description": "负责门诊挂号、复诊预约、检查排期和医保准备材料说明。",
+        "recommended_questions": [
+          "第一次看内分泌门诊怎么预约？",
+          "已经做完 CT 想约复诊，医保能直接挂号吗？",
+          "异地医保来院复诊需要准备什么？"
+        ],
+        "input_placeholder": "输入科室、检查项目、医保问题或预约时间需求...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院门诊预约与医保服务中心的“智能预约助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_infection_control",
+      "name": "传染病防控助手流程",
+      "description": "传染病防控助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 400,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "传染病防控助手检索",
+            "description": "检索传染病防控知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_infection_control",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成传染病防控助手答复",
+            "description": "根据传染病防控知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院感染管理科的“传染病防控助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 症状表现\n- 发生地点/病区\n- 是否聚集\n- 是否已有发热、腹泻、皮疹、呼吸困难等重点风险\n4. 回答尽量覆盖以下结构：\n- 当前场景判定\n- 先做什么隔离/防护\n- 是否需要上报及上报对象\n- 哪些情况立即升级处理\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "传染病防控助手",
+        "chat_tagline": "负责发热门诊分流、院感上报、隔离观察和重点监测提醒。",
+        "welcome_message": "你好，我是传染病防控助手。你可以咨询发热病例处置、院感上报和隔离要求。",
+        "agent_description": "负责发热门诊分流、院感上报、隔离观察和重点监测提醒。",
+        "recommended_questions": [
+          "发热伴皮疹患者入院时先走什么流程？",
+          "疑似流感聚集病例需要怎么上报？",
+          "病区出现腹泻聚集情况先做什么？"
+        ],
+        "input_placeholder": "输入病例症状、病区场景或上报问题...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院感染管理科的“传染病防控助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_vaccine_assistant",
+      "name": "疫苗接种助手流程",
+      "description": "疫苗接种助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 500,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "疫苗接种助手检索",
+            "description": "检索疫苗接种知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_vaccine_assistant",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "mcp_1",
+          "type": "mcp",
+          "x": 650,
+          "y": 180,
+          "data": {
+            "label": "疫苗接种助手规则核验",
+            "description": "调用医院规则系统辅助判断",
+            "serverId": "vaccine-rule-center",
+            "toolName": "evaluate_vaccine_eligibility",
+            "payload": "{\"question\": \"{{input.text}}\", \"knowledge\": \"{{nodes.knowledge_1.result.knowledge_text}}\"}"
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 940,
+          "y": 180,
+          "data": {
+            "label": "生成疫苗接种助手答复",
+            "description": "根据疫苗接种知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院预防接种门诊的“疫苗接种助手”。\n你必须严格根据用户问题、知识库命中内容以及规则系统返回结果来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【规则系统结果】\n{{nodes.mcp_1.result.result}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 接种对象年龄\n- 近期是否发热/感染\n- 既往严重过敏史\n- 想接种的疫苗名称\n4. 回答尽量覆盖以下结构：\n- 当前是否建议直接接种\n- 需要暂缓还是可预约\n- 接种前准备事项\n- 什么情况要医生面评\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1240,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "mcp_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "mcp_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "疫苗接种助手",
+        "chat_tagline": "负责接种前咨询、禁忌提醒、资料准备和留观说明。",
+        "welcome_message": "你好，我是疫苗接种助手。你可以咨询接种前准备、常见禁忌和接种后观察事项。",
+        "agent_description": "负责接种前咨询、禁忌提醒、资料准备和留观说明。",
+        "recommended_questions": [
+          "孩子发烧刚好还能打疫苗吗？",
+          "老年人打流感和肺炎疫苗要间隔多久？",
+          "HPV 接种前要准备什么？"
+        ],
+        "input_placeholder": "输入年龄、既往病史、近期发热情况或想咨询的疫苗...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院预防接种门诊的“疫苗接种助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_elderly_care",
+      "name": "老年健康助手流程",
+      "description": "老年健康助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 600,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "老年健康助手检索",
+            "description": "检索老年健康知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_elderly_care",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成老年健康助手答复",
+            "description": "根据老年健康知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院老年医学科的“老年健康助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 老人年龄\n- 基础疾病\n- 最近症状变化\n- 是否跌倒/胸痛/意识改变\n4. 回答尽量覆盖以下结构：\n- 当前最需要关注的问题\n- 建议复诊时点/科室\n- 居家管理重点\n- 哪些情况应尽快就医\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "老年健康助手",
+        "chat_tagline": "负责老年慢病管理提醒、复诊时点、生活方式和跌倒风险提示。",
+        "welcome_message": "你好，我是老年健康助手。你可以咨询慢病复诊、跌倒预防和日常健康管理。",
+        "agent_description": "负责老年慢病管理提醒、复诊时点、生活方式和跌倒风险提示。",
+        "recommended_questions": [
+          "老人血压控制不稳应该多久复诊？",
+          "最近总头晕走路不稳要先看什么？",
+          "老年糖尿病患者饮食上要注意什么？"
+        ],
+        "input_placeholder": "输入老人年龄、慢病情况、症状变化或复诊疑问...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院老年医学科的“老年健康助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_oral_health",
+      "name": "口腔健康助手流程",
+      "description": "口腔健康助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 700,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "口腔健康助手检索",
+            "description": "检索口腔健康知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_oral_health",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成口腔健康助手答复",
+            "description": "根据口腔健康知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院口腔科的“口腔健康助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 症状部位\n- 疼痛/肿胀持续时间\n- 是否发热\n- 是否术后/是否正在服药\n4. 回答尽量覆盖以下结构：\n- 建议先挂什么门诊\n- 近期在家注意事项\n- 到院前准备\n- 哪些情况别等直接复诊\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "口腔健康助手",
+        "chat_tagline": "负责口腔常见症状分诊、术后护理和复诊提醒。",
+        "welcome_message": "你好，我是口腔健康助手。你可以咨询牙痛分诊、洁牙准备和口腔术后护理。",
+        "agent_description": "负责口腔常见症状分诊、术后护理和复诊提醒。",
+        "recommended_questions": [
+          "拔智齿后一直肿多久需要复诊？",
+          "洗牙前要不要停药？",
+          "牙龈出血应该挂哪个门诊？"
+        ],
+        "input_placeholder": "输入牙痛、牙龈问题、术后情况或就诊疑问...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院口腔科的“口腔健康助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_ophthalmology",
+      "name": "眼科健康助手流程",
+      "description": "眼科健康助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 800,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "眼科健康助手检索",
+            "description": "检索眼科健康知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_ophthalmology",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成眼科健康助手答复",
+            "description": "根据眼科健康知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院眼科的“眼科健康助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 症状发生时间\n- 单眼还是双眼\n- 是否疼痛/外伤/遮挡感\n- 是否术后\n4. 回答尽量覆盖以下结构：\n- 是否存在急症信号\n- 推荐门诊或急诊路径\n- 检查前准备\n- 复查提醒\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "眼科健康助手",
+        "chat_tagline": "负责眼科常见症状分诊、检查准备和术后复查提醒。",
+        "welcome_message": "你好，我是眼科健康助手。你可以咨询视力异常、红眼、干眼和术后复查问题。",
+        "agent_description": "负责眼科常见症状分诊、检查准备和术后复查提醒。",
+        "recommended_questions": [
+          "突然眼前发黑要挂急诊吗？",
+          "白内障术后多久复查一次？",
+          "孩子近视加深需要做什么检查？"
+        ],
+        "input_placeholder": "输入眼部症状、术后天数、检查问题或复查需求...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院眼科的“眼科健康助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_sleep_health",
+      "name": "睡眠健康助手流程",
+      "description": "睡眠健康助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 900,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "睡眠健康助手检索",
+            "description": "检索睡眠健康知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_sleep_health",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成睡眠健康助手答复",
+            "description": "根据睡眠健康知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院睡眠医学门诊的“睡眠健康助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 主要睡眠问题\n- 持续时长\n- 是否打鼾/憋醒\n- 是否影响白天工作学习\n4. 回答尽量覆盖以下结构：\n- 初步判断属于哪类睡眠困扰\n- 是否建议监测/量表\n- 生活方式建议\n- 哪些情况需要尽快专科评估\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "睡眠健康助手",
+        "chat_tagline": "负责睡眠问题初筛、检查准备和生活方式提醒。",
+        "welcome_message": "你好，我是睡眠健康助手。你可以咨询失眠、鼾症、睡眠监测准备和复诊问题。",
+        "agent_description": "负责睡眠问题初筛、检查准备和生活方式提醒。",
+        "recommended_questions": [
+          "总是凌晨醒来睡不着应该挂什么科？",
+          "打鼾很重需要做睡眠监测吗？",
+          "做睡眠监测前一晚要注意什么？"
+        ],
+        "input_placeholder": "输入失眠表现、打鼾情况、白天困倦或监测问题...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院睡眠医学门诊的“睡眠健康助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_rehab_training",
+      "name": "康复训练助手流程",
+      "description": "康复训练助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 1000,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "康复训练助手检索",
+            "description": "检索康复训练知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_rehab_training",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成康复训练助手答复",
+            "description": "根据康复训练知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院康复医学科的“康复训练助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 手术/损伤类型\n- 康复阶段\n- 当前疼痛和活动度\n- 是否有伤口异常/跌倒\n4. 回答尽量覆盖以下结构：\n- 目前阶段目标\n- 可做与禁忌动作\n- 居家训练注意点\n- 何时回院复评\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "康复训练助手",
+        "chat_tagline": "负责康复训练建议、训练禁忌和复诊提醒。",
+        "welcome_message": "你好，我是康复训练助手。你可以咨询术后康复、居家训练和复诊安排。",
+        "agent_description": "负责康复训练建议、训练禁忌和复诊提醒。",
+        "recommended_questions": [
+          "膝关节术后多久可以做屈伸训练？",
+          "腰痛居家训练要注意什么？",
+          "卒中后康复复诊一般多久一次？"
+        ],
+        "input_placeholder": "输入手术类型、受伤部位、康复阶段或训练疑问...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院康复医学科的“康复训练助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_tcm_wellness",
+      "name": "中医养生助手流程",
+      "description": "中医养生助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 1100,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "中医养生助手检索",
+            "description": "检索中医养生知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_tcm_wellness",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 680,
+          "y": 180,
+          "data": {
+            "label": "生成中医养生助手答复",
+            "description": "根据中医养生知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院中医科的“中医养生助手”。\n你必须严格根据用户问题、知识库命中内容来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 主要困扰\n- 持续时间\n- 季节/作息饮食情况\n- 是否已有明确疾病诊断\n4. 回答尽量覆盖以下结构：\n- 适合怎样调养\n- 饮食起居建议\n- 是否建议看中医门诊\n- 哪些情况不要只靠养生建议\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 980,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "knowledge_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "中医养生助手",
+        "chat_tagline": "负责体质调养、饮食起居和中医门诊就诊准备说明。",
+        "welcome_message": "你好，我是中医养生助手。你可以咨询体质调养、四时养生和中医门诊准备。",
+        "agent_description": "负责体质调养、饮食起居和中医门诊就诊准备说明。",
+        "recommended_questions": [
+          "春天容易上火怎么调养？",
+          "总觉得乏力、手脚凉适合看中医吗？",
+          "第一次去中医门诊要准备什么？"
+        ],
+        "input_placeholder": "输入体质困扰、季节症状、饮食作息问题或中医门诊疑问...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院中医科的“中医养生助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    },
+    {
+      "workflow_id": "wf_insurance_rules",
+      "name": "医保规则助手流程",
+      "description": "医保规则助手专用工作流，按独立知识库和业务规则生成答复。",
+      "enabled": true,
+      "sort_order": 1200,
+      "version": "V1.0",
+      "status": "published",
+      "updated_at": "2026-04-10 12:00:00",
+      "nodes": [
+        {
+          "id": "start_1",
+          "type": "start",
+          "x": 80,
+          "y": 180,
+          "data": {
+            "label": "开始节点",
+            "description": "接收用户输入",
+            "triggerType": "API 调用"
+          }
+        },
+        {
+          "id": "knowledge_1",
+          "type": "knowledge",
+          "x": 360,
+          "y": 180,
+          "data": {
+            "label": "医保规则助手检索",
+            "description": "检索医保规则知识库相关知识",
+            "query": "{{input.text}}",
+            "knowledgeBase": "kb_insurance_rules",
+            "topK": 5,
+            "threshold": 0.12
+          }
+        },
+        {
+          "id": "mcp_1",
+          "type": "mcp",
+          "x": 650,
+          "y": 180,
+          "data": {
+            "label": "医保规则助手规则核验",
+            "description": "调用医院规则系统辅助判断",
+            "serverId": "insurance-rule-center",
+            "toolName": "check_insurance_coverage",
+            "payload": "{\"question\": \"{{input.text}}\", \"knowledge\": \"{{nodes.knowledge_1.result.knowledge_text}}\"}"
+          }
+        },
+        {
+          "id": "ai_1",
+          "type": "ai",
+          "x": 940,
+          "y": 180,
+          "data": {
+            "label": "生成医保规则助手答复",
+            "description": "根据医保规则知识库输出业务答复",
+            "prompt": "你现在扮演华东协同医院医保办的“医保规则助手”。\n你必须严格根据用户问题、知识库命中内容以及规则系统返回结果来组织答复。\n\n【用户问题】\n{{input.text}}\n\n【知识库内容】\n{{nodes.knowledge_1.result.knowledge_text}}\n\n【规则系统结果】\n{{nodes.mcp_1.result.result}}\n\n【输出要求】\n1. 第一段必须直接给结论，不要先说“根据您提供的信息”。\n2. 结论后按业务动作拆解步骤，尽量让患者一看就知道下一步怎么办。\n3. 如果信息不足，不要硬给结论；先说明缺口，再追问这些关键字段中的最必要项：\n- 医保类型\n- 门诊/检查/住院哪类场景\n- 是否异地就医\n- 是否涉及转诊/备案/门慢病\n4. 回答尽量覆盖以下结构：\n- 这件事能否这样办\n- 需要哪些材料\n- 办理顺序\n- 哪些情况必须人工窗口复核\n5. 涉及急危重症、人工窗口复核、感染上报、接种医生面评、线下复诊时，要单独列出“请尽快处理/请转人工”。\n6. 不得输出确诊、处方、手术建议、报销承诺、号源承诺或知识库中没有的细节。\n7. 如果规则系统与知识库口径不同，以规则系统或本周公告优先，并提醒以院内现场最终执行为准。\n8. 输出语言要像医院真正面向患者的服务答复，专业但不端着，不要像 AI 模板文。\n",
+            "model": "__default__",
+            "temperature": 0.2
+          }
+        },
+        {
+          "id": "end_1",
+          "type": "end",
+          "x": 1240,
+          "y": 180,
+          "data": {
+            "label": "结束节点",
+            "description": "返回结果",
+            "endType": "正常结束",
+            "endMessage": "{{last.text}}"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "from": "start_1",
+          "to": "knowledge_1",
+          "label": ""
+        },
+        {
+          "id": "c2",
+          "from": "knowledge_1",
+          "to": "mcp_1",
+          "label": ""
+        },
+        {
+          "id": "c3",
+          "from": "mcp_1",
+          "to": "ai_1",
+          "label": ""
+        },
+        {
+          "id": "c4",
+          "from": "ai_1",
+          "to": "end_1",
+          "label": ""
+        }
+      ],
+      "app_overrides": {
+        "chat_title": "医保规则助手",
+        "chat_tagline": "负责医保材料准备、备案规则、门诊结算和人工复核提醒。",
+        "welcome_message": "你好，我是医保规则助手。你可以咨询门诊医保结算、异地备案和人工复核口径。",
+        "agent_description": "负责医保材料准备、备案规则、门诊结算和人工复核提醒。",
+        "recommended_questions": [
+          "异地医保来看门诊需要先做什么？",
+          "门慢病能不能直接在医院窗口备案？",
+          "哪些情况需要去医保窗口人工审核？"
+        ],
+        "input_placeholder": "输入医保类型、结算问题、异地备案或材料疑问...",
+        "send_button_text": "开始咨询"
+      },
+      "system_prompt": "你是华东协同医院医保办的“医保规则助手”。\n请优先根据知识库与流程节点结果回答，禁止脱离依据编造。\n如涉及诊断、用药、报销、急危重症、线下处置，务必给出清晰的升级提醒。\n\n【知识库内容开始】\n{knowledge_context}\n【知识库内容结束】"
+    }
+  ],
+  "updated_at": 1775891606
+}

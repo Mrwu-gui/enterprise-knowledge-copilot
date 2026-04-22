@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
 import smtplib
 import ssl
+import subprocess
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -262,9 +265,13 @@ def run_mcp_tool(
     )
     if not target:
         return {"ok": False, "tool": "mcp", "message": f"MCP 服务不存在或未启用：{server_id}"}
-    bridge_url = str(target.get("bridge_url") or "").strip()
-    if not bridge_url:
+    transport = str(target.get("transport") or ("http" if (target.get("bridge_url") or target.get("url")) else "stdio")).strip().lower() or "http"
+    bridge_url = str(target.get("bridge_url") or target.get("url") or "").strip()
+    command = str(target.get("command") or "").strip()
+    if transport == "http" and not bridge_url:
         return {"ok": False, "tool": "mcp", "message": f"MCP 服务未配置调用地址：{server_id}"}
+    if transport == "stdio" and not command:
+        return {"ok": False, "tool": "mcp", "message": f"MCP 服务未配置启动命令：{server_id}"}
     headers = {"Content-Type": "application/json"}
     if isinstance(target.get("headers"), dict):
         headers.update({str(k): str(v) for k, v in target.get("headers", {}).items()})
@@ -279,13 +286,50 @@ def run_mcp_tool(
             "tenant_name": tenant_name or "",
         },
     }
+    timeout_seconds = int(config.get("request_timeout_seconds", 30) or 30)
+    if transport == "stdio":
+        args = [str(v) for v in (target.get("args") or []) if str(v).strip()]
+        if not args and " " in command:
+            command_parts = shlex.split(command)
+            command = command_parts[0]
+            args = command_parts[1:]
+        env = os.environ.copy()
+        if isinstance(target.get("env"), dict):
+            env.update({str(k): str(v) for k, v in target.get("env", {}).items()})
+        for key in (target.get("env_passthrough") or []):
+            clean_key = str(key or "").strip()
+            if clean_key and clean_key in os.environ:
+                env[clean_key] = os.environ[clean_key]
+        try:
+            proc = subprocess.run(
+                [command, *args],
+                input=json.dumps(request_body, ensure_ascii=False),
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                env=env,
+            )
+            raw = (proc.stdout or "").strip()
+            parsed = json.loads(raw) if raw else {}
+            stderr_text = (proc.stderr or "").strip()
+            ok = proc.returncode == 0 and not (isinstance(parsed, dict) and parsed.get("ok") is False)
+            return {
+                "ok": ok,
+                "tool": "mcp",
+                "server_id": server_id,
+                "tool_name": tool_name,
+                "message": str(parsed.get("message") or stderr_text or "MCP 工具调用完成") if isinstance(parsed, dict) else (stderr_text or "MCP 工具调用完成"),
+                "result": parsed.get("result") if isinstance(parsed, dict) and "result" in parsed else (parsed if parsed else raw),
+                "skip_cache": True,
+            }
+        except Exception as exc:
+            return {"ok": False, "tool": "mcp", "message": f"MCP 调用失败：{exc}"}
     request = urllib.request.Request(
         bridge_url,
         data=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
         headers=headers,
         method="POST",
     )
-    timeout_seconds = int(config.get("request_timeout_seconds", 30) or 30)
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as resp:
             raw = resp.read().decode("utf-8", errors="ignore")
